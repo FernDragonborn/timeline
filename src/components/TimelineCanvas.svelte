@@ -19,6 +19,11 @@
    */
   const DRAG_THRESHOLD_PIXELS = 4;
 
+  /** `WheelEvent.deltaMode`, коли крок міряється рядками, а не пікселями. */
+  const WHEEL_DELTA_LINE = 1;
+  /** У скільки пікселів рахувати такий рядок. */
+  const WHEEL_LINE_PIXELS = 33;
+
   let scroller: HTMLDivElement;
   let pointerStartX = 0;
   let pointerMoved = false;
@@ -195,20 +200,47 @@
     timeline.startRenaming(created.id);
   }
 
+  /**
+   * Крок колеса в пікселях, незалежно від того, на яку вісь браузер його поклав.
+   *
+   * Осі тут не фіксовані: із затиснутим Shift Chromium сам переносить крок з
+   * `deltaY` у `deltaX`, тож читати лише одну вісь — значить не побачити
+   * половини випадків. `deltaMode` «рядки» без множника дає крок у кілька
+   * пікселів, тобто рух ледь помітний.
+   */
+  function wheelStepPixels(nativeEvent: WheelEvent): number {
+    const scale = nativeEvent.deltaMode === WHEEL_DELTA_LINE ? WHEEL_LINE_PIXELS : 1;
+    const dominant =
+      Math.abs(nativeEvent.deltaY) >= Math.abs(nativeEvent.deltaX)
+        ? nativeEvent.deltaY
+        : nativeEvent.deltaX;
+    return dominant * scale;
+  }
+
+  /**
+   * Колесо возить шкалу ВЗДОВЖ ЧАСУ, з Shift — впоперек. Це навпаки до типової
+   * поведінки браузера, і навмисно: на часовій шкалі рух горизонталлю —
+   * основний, а доріжок зазвичай кілька і вертикаль потрібна значно рідше.
+   */
   function onWheel(nativeEvent: WheelEvent): void {
-    if (!nativeEvent.ctrlKey) return;
+    const step = wheelStepPixels(nativeEvent);
+
+    if (nativeEvent.ctrlKey) {
+      nativeEvent.preventDefault();
+      const viewportX = nativeEvent.clientX - scroller.getBoundingClientRect().left;
+      const bodyPixel = scroller.scrollLeft + viewportX - TRACK_HEAD_WIDTH_PIXELS;
+      const anchorDay = pixelToDay(timeline.domain, timeline.pixelsPerDay, bodyPixel);
+
+      timeline.setScale(timeline.pixelsPerDay * Math.pow(ZOOM_WHEEL_BASE, -step), {
+        day: anchorDay,
+        viewportPixel: viewportX,
+      });
+      return;
+    }
+
     nativeEvent.preventDefault();
-
-    const viewportX = nativeEvent.clientX - scroller.getBoundingClientRect().left;
-    const bodyPixel = scroller.scrollLeft + viewportX - TRACK_HEAD_WIDTH_PIXELS;
-    const anchorDay = pixelToDay(timeline.domain, timeline.pixelsPerDay, bodyPixel);
-
-    /* deltaMode 1 — «рядки» замість пікселів: без множника зум там ледь повзе. */
-    const delta = nativeEvent.deltaY * (nativeEvent.deltaMode === 1 ? 33 : 1);
-    timeline.setScale(timeline.pixelsPerDay * Math.pow(ZOOM_WHEEL_BASE, -delta), {
-      day: anchorDay,
-      viewportPixel: viewportX,
-    });
+    if (nativeEvent.shiftKey) scroller.scrollTop += step;
+    else scroller.scrollLeft += step;
   }
 
   function reportScroll(): void {

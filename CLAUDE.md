@@ -81,6 +81,11 @@ Settled with the maintainer; changing any of these is a decision, not an impleme
   (days → weeks → months → quarters → years) is *derived* from it, never a separate mode the user
   picks. It is deliberately **coarse per step** (~1.5× per wheel notch): the full range is a few
   gestures, not a slow crawl.
+- **The wheel moves along time; Shift moves across tracks; Ctrl zooms.** This inverts the browser
+  default deliberately — on a timeline the horizontal axis is the one you travel, while tracks are
+  few and rarely need scrolling. Read the dominant of `deltaY`/`deltaX` rather than one axis:
+  holding Shift makes Chromium move the step onto the other axis by itself, so a handler that reads
+  only `deltaY` sees nothing.
 - **The scrollable domain is a century either side of today**, fixed, and it does **not** grow from
   scrolling. Dates beyond it are reached with the "go to date" field, which widens the domain once.
   An earlier version extended the domain when you hit the edge and compensated `scrollLeft` to keep

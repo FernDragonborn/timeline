@@ -75,6 +75,7 @@
     <kbd>2× клік</kbd> по назві доріжки — її властивості<br />
     <kbd>тягнути край</kbd> — змінити дати<br />
     <kbd>тягнути тіло</kbd> — зсунути, зокрема на іншу доріжку<br />
+    <kbd>колесо</kbd> — вздовж часу, з <kbd>Shift</kbd> — впоперек<br />
     <kbd>Ctrl</kbd> + колесо або <kbd>+</kbd>/<kbd>−</kbd> — масштаб<br />
     <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> — відкат і повтор<br />
     <kbd>Ctrl</kbd>+<kbd>S</kbd> — записати одразу, <kbd>Ctrl</kbd>+<kbd>W</kbd> — закрити вікно<br />

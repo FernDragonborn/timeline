@@ -140,6 +140,14 @@ Settled with the maintainer; changing any of these is a decision, not an impleme
 - **The inspector shows whatever is selected** — an event, a track, or (when nothing is) the
   document. Selection is a named union of event-or-track, not two parallel id fields. Track
   properties, including colour, are reached by double-clicking the track's name.
+- **A field with an uncommitted edit commits on `pointerdown` anywhere outside it, not on `blur`.**
+  Leaving a field applies the edit and Escape cancels it — but `blur` is the wrong moment to detect
+  leaving. Clicking another event re-renders the inspector, and Svelte *reuses* the same field
+  instance rather than building a new one, so the typed text survives while `value` and the commit
+  callback already point at the next event: the edit landed on the event the user did not touch,
+  and the one they did edit kept its old date. Capture-phase `pointerdown` fires before the
+  selection changes, so the commit still goes where it was meant to. The inspector also keys its
+  date fields on the event id, so a different event can never inherit a dirty one.
 - **Tracks carry arbitrary user-editable names** and a colour; five by default, add/remove allowed.
 - **The document may declare its own start and end** (`bounds`, `null` when unbounded). When set,
   they replace the free domain outright: scrolling stops there and clicks outside cannot create

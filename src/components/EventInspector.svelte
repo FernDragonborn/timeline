@@ -70,24 +70,28 @@
 </div>
 
 <div class="insp-two">
-  <div class="insp-field">
-    <span>{event.kind === EVENT_KIND.Point ? "Дата" : "Початок"}</span>
-    <DateField
-      value={event.start}
-      title="День, місяць, рік. Приймає і 20.03.2026, і 2026-03-20"
-      onCommit={(iso) => edit({ start: iso })}
-    />
-  </div>
-  {#if event.kind !== EVENT_KIND.Point}
+  <!-- Інша подія — інші поля. Без ключа Svelte перевикористав би ті самі, і
+       незаписаний текст переїхав би на сусідню подію разом із курсором. -->
+  {#key event.id}
     <div class="insp-field">
-      <span>Кінець</span>
+      <span>{event.kind === EVENT_KIND.Point ? "Дата" : "Початок"}</span>
       <DateField
-        value={event.end}
+        value={event.start}
         title="День, місяць, рік. Приймає і 20.03.2026, і 2026-03-20"
-        onCommit={(iso) => edit({ end: iso })}
+        onCommit={(iso) => edit({ start: iso })}
       />
     </div>
-  {/if}
+    {#if event.kind !== EVENT_KIND.Point}
+      <div class="insp-field">
+        <span>Кінець</span>
+        <DateField
+          value={event.end}
+          title="День, місяць, рік. Приймає і 20.03.2026, і 2026-03-20"
+          onCommit={(iso) => edit({ end: iso })}
+        />
+      </div>
+    {/if}
+  {/key}
 </div>
 
 {#if event.kind !== EVENT_KIND.Point}

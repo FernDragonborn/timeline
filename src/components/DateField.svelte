@@ -39,6 +39,26 @@
     if (iso !== value) onCommit(iso);
   }
 
+  /**
+   * Клік будь-де поза полем застосовує правку — і робить це ДО того, як цей
+   * самий клік змінить виділення.
+   *
+   * Чекати на `blur` тут не можна. Клік по іншій події перемальовує панель, і
+   * Svelte не створює поле заново, а перевикористовує те саме: текст лишається,
+   * а `value` й `onCommit` уже вказують на іншу подію. `blur` тоді записував
+   * набрану дату в ЧУЖУ подію, а та, яку правили, лишалась без змін.
+   */
+  $effect(() => {
+    function onPointerDownAnywhere(nativeEvent: PointerEvent): void {
+      if (draft === null) return;
+      const target = nativeEvent.target;
+      if (target instanceof Node && field !== null && field.contains(target)) return;
+      commit();
+    }
+    window.addEventListener("pointerdown", onPointerDownAnywhere, true);
+    return () => window.removeEventListener("pointerdown", onPointerDownAnywhere, true);
+  });
+
   function onKeyDown(nativeEvent: KeyboardEvent): void {
     if (nativeEvent.code === "Enter" || nativeEvent.code === "NumpadEnter") {
       nativeEvent.preventDefault();

@@ -1,6 +1,8 @@
 import { EVENT_KIND } from "../model/timeline-document";
 import { dayToPixel, type TimeDomain } from "../view/timeline-viewport";
 import {
+  LABEL_AFTER_MARKER_GAP_PIXELS,
+  LABEL_LEFT_INSET_PIXELS,
   OVERLAP_MODE,
   POINT_MARKER_PIXELS,
   type EventPlacement,
@@ -109,20 +111,20 @@ export function labelPosition(
   const rectangle = blockRectangle(placement, mode, domain, pixelsPerDay);
   const isPoint = placement.event.kind === EVENT_KIND.Point;
 
-  if (mode === OVERLAP_MODE.Stack) {
-    return {
-      left: isPoint ? rectangle.left + rectangle.width + 5 : rectangle.left + 7,
-      top: rectangle.top,
-    };
-  }
+  const left = isPoint
+    ? rectangle.left + rectangle.width + LABEL_AFTER_MARKER_GAP_PIXELS
+    : rectangle.left + LABEL_LEFT_INSET_PIXELS;
 
-  /* Сходинка не має винести підпис у сусідню доріжку: при глибокому перетині
-     нижні підрівні впираються в останній рядок, де ще видно текст цілком. */
+  if (mode === OVERLAP_MODE.Stack) return { left, top: rectangle.top };
+
+  /* Скільки сходинок узагалі буде, вирішує `OVERLAY_LABEL_LANE_LIMIT` у
+     track-layout; тут — гарантія, що жодна з них не вилізе за межі рядка й не
+     напливе на сусідню доріжку. Дві різні задачі, тому й два місця. */
   const lowestLabelTop = OVERLAY_ROW_HEIGHT - OVERLAY_BLOCK_INSET - LABEL_LINE_HEIGHT_PIXELS;
   return {
-    left: isPoint ? rectangle.left + rectangle.width + 5 : rectangle.left + 8,
+    left,
     top: Math.min(
-      OVERLAY_BLOCK_INSET + 4 + placement.lane * OVERLAY_LABEL_STEP,
+      OVERLAY_BLOCK_INSET + 4 + placement.labelLane * OVERLAY_LABEL_STEP,
       lowestLabelTop,
     ),
   };

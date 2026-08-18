@@ -19,7 +19,11 @@
   const measureLabel = createLabelMeasurer('600 12px -apple-system, "Segoe UI", Inter, system-ui, sans-serif');
 
   const layout = $derived(
-    planTrackLayout(timeline.eventsOfTrack(track.id), timeline.pixelsPerDay, measureLabel),
+    planTrackLayout(timeline.eventsOfTrack(track.id), {
+      pixelsPerDay: timeline.pixelsPerDay,
+      overlapMode: timeline.overlapMode,
+      measureLabelWidth: measureLabel,
+    }),
   );
   const height = $derived(rowHeight(timeline.overlapMode, layout.laneCount));
   const isStacked = $derived(timeline.overlapMode === OVERLAP_MODE.Stack);

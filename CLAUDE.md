@@ -96,10 +96,17 @@ Settled with the maintainer; changing any of these is a decision, not an impleme
   degenerates into an invisible sliver when zoomed out, a marker does not. A point's `end` always
   equals its `start` in the file, so a reader that ignores `kind` still sees a valid one-day event.
 - **A label is drawn in full or not at all — never truncated with an ellipsis.** "Відпус…" costs
-  space and says nothing. Available width is the distance to the next event *on the same lane*, not
-  the block's own width, so a name may overflow past its block's right edge while there is nothing
-  there. Text is measured with canvas `measureText` before layout, never by reading `offsetWidth`
-  off the DOM.
+  space and says nothing. A name may overflow past its block's right edge while there is nothing
+  there, so the block's own width is not the limit. Text is measured with canvas `measureText`
+  before layout, never by reading `offsetWidth` off the DOM.
+- **What crowds a label is another label, not another block.** Two events may touch at the edges or
+  share days while their short names sit side by side with room to spare — and a one-day event with
+  a long name takes far more width than its rectangle. So labels are packed by their own pixel
+  extents into label lanes (`labelLane`), kept deliberately separate from the block lane (`lane`,
+  which stack mode uses for vertical position). When two names would collide the later one drops a
+  step; only when no step is free does it disappear. Blocks are still packed by day overlap, and
+  there the comparison is non-strict — an event starting the day after another ends does not
+  overlap it, and a strict `<` put every pair of touching events on two rows.
 - **Draw order is by duration, longest first** — so the shorter event lands on top. With
   semi-transparent fills this barely affects colour; what it decides is whose label is legible and
   who catches the click, and the answer wanted is almost always the shorter one. Points sort above

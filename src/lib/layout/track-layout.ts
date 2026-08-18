@@ -25,8 +25,14 @@ export interface EventPlacement {
    * розміру за поточного масштабу.
    */
   footprintDays: number;
-  /** Підрівень: у режимі стеку — вертикальна позиція, у накладанні — зсув підпису. */
+  /** Підрівень блока. У стеку це вертикальна позиція; у накладанні — лише лічильник перетинів. */
   lane: number;
+  /**
+   * Сходинка підпису в режимі накладання. Рахується окремо від `lane`, бо
+   * перетин блоків і перетин назв — різні події: смуги можуть налазити одна на
+   * одну, поки їхні короткі назви стоять поруч вільно.
+   */
+  labelLane: number;
   /** Чи є місце написати назву, не обрізаючи її. */
   showLabel: boolean;
 }
@@ -44,68 +50,119 @@ export interface TrackLayout {
   laneCount: number;
 }
 
-/** Скільки пікселів лишити між кінцем підпису й початком сусіда. */
+/** Скільки пікселів лишити між кінцем одного підпису й початком наступного. */
 const LABEL_GAP_PIXELS = 10;
+
+/** Відступ підпису від лівого краю прямокутника. */
+export const LABEL_LEFT_INSET_PIXELS = 8;
+
+/** Проміжок між позначкою точкової події та її назвою. */
+export const LABEL_AFTER_MARKER_GAP_PIXELS = 5;
+
+/**
+ * Скільки сходинок підписів вміщує рядок у режимі накладання. Понад це назву
+ * вже нема куди опустити — там і починає діяти «цілком або ніяк».
+ */
+export const OVERLAY_LABEL_LANE_LIMIT = 3;
 
 /**
  * Жадібна розкладка по підрівнях: подія лягає на перший підрівень, де вона ні
  * з ким не перетинається. У межах ОДНОГО підрівня події гарантовано не
- * накладаються — на цьому тримається і режим стеку, і розрахунок місця під
- * підписи нижче.
+ * накладаються — на цьому тримається режим стеку.
+ *
+ * Зайнятість зберігається як день ПІСЛЯ останнього (`endDay + 1`), тож
+ * порівняння нестрогe: подія, що починається рівно там, де попередня
+ * скінчилась, з нею не перетинається і має право на той самий підрівень.
+ * Зі строгим `<` дві дотичні події займали два рядки замість одного.
  */
 function assignLanes(sortedByStart: EventPlacement[]): number {
-  const lastOccupiedDayPerLane: number[] = [];
+  const nextFreeDayPerLane: number[] = [];
   for (const placement of sortedByStart) {
     let lane = 0;
-    while (lane < lastOccupiedDayPerLane.length) {
-      const lastDay = lastOccupiedDayPerLane[lane];
-      if (lastDay === undefined || lastDay < placement.startDay) break;
+    while (lane < nextFreeDayPerLane.length) {
+      const nextFreeDay = nextFreeDayPerLane[lane];
+      if (nextFreeDay === undefined || nextFreeDay <= placement.startDay) break;
       lane += 1;
     }
-    lastOccupiedDayPerLane[lane] = placement.startDay + placement.footprintDays;
+    nextFreeDayPerLane[lane] = placement.startDay + placement.footprintDays;
     placement.lane = lane;
   }
-  return Math.max(1, lastOccupiedDayPerLane.length);
+  return Math.max(1, nextFreeDayPerLane.length);
 }
 
 /**
- * Підпис або вміщується повністю, або його немає — «Відпус…» не каже нічого,
- * а місце займає.
+ * Ліва межа підпису в пікселях, рахуючи від початку епохи. Домен тут не
+ * потрібен: сходинку вирішують ВІДСТАНІ між підписами, а спільний зсув їх не
+ * змінює.
+ */
+function labelLeftPixel(placement: EventPlacement, pixelsPerDay: number): number {
+  const startPixel = placement.startDay * pixelsPerDay;
+  if (placement.event.kind !== EVENT_KIND.Point) return startPixel + LABEL_LEFT_INSET_PIXELS;
+  /* Шпилька стоїть на середині доби, а назва — одразу за нею. */
+  return (
+    startPixel + pixelsPerDay / 2 + POINT_MARKER_PIXELS / 2 + LABEL_AFTER_MARKER_GAP_PIXELS
+  );
+}
+
+interface LabelExtent {
+  placement: EventPlacement;
+  left: number;
+  right: number;
+}
+
+/**
+ * Куди сяде кожен підпис. Міряємо САМІ підписи, а не блоки під ними — це різні
+ * речі: дві події можуть торкатися краями чи ділити кілька днів, поки їхні
+ * короткі назви стоять поруч вільно, і навпаки — одноденна подія з довгою
+ * назвою займає набагато більше місця, ніж її прямокутник.
  *
- * Ширини самого прямокутника для цього мало: назва може виходити ЗА його правий
- * край, поки там порожньо. Тому доступне місце — це відстань до наступної події
- * на тому ж підрівні, а не власна ширина блока. Через це на дрібному масштабі
- * довгі події лишаються підписаними, а короткі стають кольоровими рисками —
- * їхні назви повертаються самі, щойно наблизити.
+ * Коли назви таки налазять, друга опускається на сходинку нижче, а не зникає.
+ * Зникає вона лише тоді, коли вільних сходинок не лишилось — тоді діє «цілком
+ * або ніяк», бо «Відпус…» місце займає, а не каже нічого.
  */
 function planLabels(
-  sortedByStart: EventPlacement[],
+  placements: EventPlacement[],
   pixelsPerDay: number,
   measureLabelWidth: (text: string) => number,
+  mode: OverlapMode,
 ): void {
-  const nextStartDayPerLane = new Map<number, DayNumber>();
+  /* У стеку підписи не зсуваються: блоки вже стоять на різній висоті, тож
+     кожен підрівень має рівно одну сходинку — свою. */
+  const laneLimit = mode === OVERLAP_MODE.Stack ? 1 : OVERLAY_LABEL_LANE_LIMIT;
 
-  /* Ідемо назад: так на кожному кроці вже відомий найближчий сусід справа. */
-  for (let index = sortedByStart.length - 1; index >= 0; index -= 1) {
-    const placement = sortedByStart[index];
-    if (!placement) continue;
-
-    const nextStartDay = nextStartDayPerLane.get(placement.lane);
-    const availablePixels =
-      nextStartDay === undefined
-        ? Number.POSITIVE_INFINITY
-        : (nextStartDay - placement.startDay) * pixelsPerDay;
-
-    /* Підпис точкової події починається ПІСЛЯ позначки, тож її ширина з'їдає
-       частину доступного місця. */
-    const labelOffsetPixels =
-      placement.event.kind === EVENT_KIND.Point ? POINT_MARKER_PIXELS : 0;
+  const extents: LabelExtent[] = [];
+  for (const placement of placements) {
+    placement.labelLane = 0;
+    placement.showLabel = false;
     const title = placement.event.title.trim();
-    placement.showLabel =
-      title.length > 0 &&
-      measureLabelWidth(title) + LABEL_GAP_PIXELS + labelOffsetPixels <= availablePixels;
+    if (title.length === 0) continue;
+    const left = labelLeftPixel(placement, pixelsPerDay);
+    extents.push({ placement, left, right: left + measureLabelWidth(title) });
+  }
+  /* Замітаємо зліва направо саме по підписах: у точкової події назва починається
+     праворуч від позначки, тож порядок за днем початку тут був би не той. */
+  extents.sort((a, b) => a.left - b.left);
 
-    nextStartDayPerLane.set(placement.lane, placement.startDay);
+  const occupiedUntilByRow = new Map<number, number[]>();
+  for (const extent of extents) {
+    const row = mode === OVERLAP_MODE.Stack ? extent.placement.lane : 0;
+    let occupiedUntil = occupiedUntilByRow.get(row);
+    if (occupiedUntil === undefined) {
+      occupiedUntil = [];
+      occupiedUntilByRow.set(row, occupiedUntil);
+    }
+
+    let lane = 0;
+    while (lane < occupiedUntil.length) {
+      const until = occupiedUntil[lane];
+      if (until === undefined || until <= extent.left) break;
+      lane += 1;
+    }
+    if (lane >= laneLimit) continue;
+
+    occupiedUntil[lane] = extent.right + LABEL_GAP_PIXELS;
+    extent.placement.labelLane = lane;
+    extent.placement.showLabel = true;
   }
 }
 
@@ -127,10 +184,16 @@ function byDurationDescending(a: EventPlacement, b: EventPlacement): number {
   return a.startDay - b.startDay;
 }
 
+export interface TrackLayoutOptions {
+  pixelsPerDay: number;
+  /** Потрібен уже на етапі розкладки: від режиму залежить, як лягають підписи. */
+  overlapMode: OverlapMode;
+  measureLabelWidth: (text: string) => number;
+}
+
 export function planTrackLayout(
   events: readonly TimelineEvent[],
-  pixelsPerDay: number,
-  measureLabelWidth: (text: string) => number,
+  { pixelsPerDay, overlapMode, measureLabelWidth }: TrackLayoutOptions,
 ): TrackLayout {
   const pointFootprintDays = POINT_MARKER_PIXELS / pixelsPerDay;
   const placements: EventPlacement[] = events.map((event) => {
@@ -145,13 +208,14 @@ export function planTrackLayout(
           ? pointFootprintDays
           : Math.max(endDay - startDay + 1, pointFootprintDays),
       lane: 0,
+      labelLane: 0,
       showLabel: false,
     };
   });
 
   const sortedByStart = [...placements].sort((a, b) => a.startDay - b.startDay);
   const laneCount = assignLanes(sortedByStart);
-  planLabels(sortedByStart, pixelsPerDay, measureLabelWidth);
+  planLabels(placements, pixelsPerDay, measureLabelWidth, overlapMode);
 
   placements.sort(byDurationDescending);
   return { placements, laneCount };

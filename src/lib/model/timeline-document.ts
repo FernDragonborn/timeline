@@ -24,10 +24,24 @@ const isoDateSchema = z
   .regex(ISO_DATE, "Дата має бути у форматі YYYY-MM-DD")
   .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), "Неіснуюча дата");
 
+/** Висота доріжки за замовчуванням; вона ж нижня межа при перетягуванні. */
+export const DEFAULT_TRACK_HEIGHT = 66;
+export const MIN_TRACK_HEIGHT = 40;
+export const MAX_TRACK_HEIGHT = 400;
+
 export const trackSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
   color: z.string().regex(HEX_COLOR, "Колір доріжки має бути #RRGGBB"),
+  /* Висота живе у файлі, а не у вікні: «ця доріжка головна, хай буде вища» —
+     твердження про дані, і воно має пережити перезапуск та поїхати разом із
+     документом. Старіші файли її не мали, тож доповнюємо, а не відхиляємо. */
+  height: z
+    .number()
+    .min(MIN_TRACK_HEIGHT)
+    .max(MAX_TRACK_HEIGHT)
+    .default(DEFAULT_TRACK_HEIGHT)
+    .catch(DEFAULT_TRACK_HEIGHT),
 });
 
 /**
@@ -138,7 +152,7 @@ export function createId(): string {
 }
 
 export function createTrack(name: string, colorIndex: number): Track {
-  return { id: createId(), name, color: paletteColorAt(colorIndex) };
+  return { id: createId(), name, color: paletteColorAt(colorIndex), height: DEFAULT_TRACK_HEIGHT };
 }
 
 export function createEmptyDocument(): TimelineDocument {

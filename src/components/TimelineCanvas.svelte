@@ -3,9 +3,8 @@
   import Ruler from "./Ruler.svelte";
   import TimeGrid from "./TimeGrid.svelte";
   import TrackRow from "./TrackRow.svelte";
-  import { TRACK_HEAD_WIDTH_PIXELS } from "../lib/layout/row-geometry";
   import { EVENT_KIND } from "../lib/model/timeline-document";
-  import { isoToDayNumber, type DayNumber } from "../lib/time/day-number";
+  import { type DayNumber } from "../lib/time/day-number";
   import { snapKindForTier, snapToPeriodEnd, snapToPeriodStart } from "../lib/time/ruler";
   import { DRAG_KIND, timeline } from "../lib/timeline-view-model.svelte";
   import { dayToPixel, pixelToDay, ZOOM_WHEEL_BASE } from "../lib/view/timeline-viewport";
@@ -34,6 +33,15 @@
    */
   let suppressDoubleClick = false;
   let creation = $state<{ trackId: string; anchorDay: DayNumber; currentDay: DayNumber } | null>(null);
+
+  /** Рамка виділення, у координатах вікна — саме в них лежать прямокутники подій. */
+  interface MarqueeBox {
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+  }
+  let marquee = $state<MarqueeBox | null>(null);
 
   function dayAtClientX(bodyElement: Element, clientX: number): DayNumber {
     const rectangle = bodyElement.getBoundingClientRect();
@@ -75,7 +83,12 @@
       const eventId = eventElement.getAttribute("data-event-id");
       const model = timeline.events.find((candidate) => candidate.id === eventId);
       if (!model) return;
-      timeline.selectEvent(model.id);
+
+      /* Натискання на вже обране НЕ перебирає виділення: інакше взятись за
+         гурт було б неможливо — перший же дотик лишав би в ньому одну подію. */
+      if (nativeEvent.shiftKey || !timeline.isEventSelected(model.id)) {
+        timeline.selectEvent(model.id, { add: nativeEvent.shiftKey });
+      }
 
       const resizeSide = (nativeEvent.target as Element).closest("[data-resize]")?.getAttribute("data-resize");
       timeline.beginDrag({
@@ -85,10 +98,22 @@
             : resizeSide === "end"
               ? DRAG_KIND.ResizeEnd
               : DRAG_KIND.Move,
-        eventId: model.id,
-        originalStartDay: isoToDayNumber(model.start),
-        originalEndDay: isoToDayNumber(model.end),
+        grabbedId: model.id,
       });
+    } else if (nativeEvent.shiftKey) {
+      /* Shift по порожньому — рамка виділення. Проста протяжка тут створює
+         подію, тож гілка вільна й жести не сперечаються.
+
+         `preventDefault` тут обов'язковий: Shift+натискання для браузера — це
+         «розтягнути виділення тексту від каретки», і без цього рамка тягнеться
+         разом із синьою смугою через півзастосунку. */
+      nativeEvent.preventDefault();
+      marquee = {
+        fromX: nativeEvent.clientX,
+        fromY: nativeEvent.clientY,
+        toX: nativeEvent.clientX,
+        toY: nativeEvent.clientY,
+      };
     } else {
       const anchorDay = dayAtClientX(body, nativeEvent.clientX);
       timeline.clearSelection();
@@ -97,12 +122,66 @@
     scroller.setPointerCapture(nativeEvent.pointerId);
   }
 
+  /**
+   * Події під рамкою. Влучання рахуємо по прямокутниках самих елементів, а не
+   * перераховуємо розкладку: доріжки тепер різної висоти, і друга копія цієї
+   * арифметики розійшлася б із першою на першій же правці.
+   */
+  function eventsWithin(box: MarqueeBox): string[] {
+    const left = Math.min(box.fromX, box.toX);
+    const right = Math.max(box.fromX, box.toX);
+    const top = Math.min(box.fromY, box.toY);
+    const bottom = Math.max(box.fromY, box.toY);
+
+    const caught: string[] = [];
+    for (const element of document.querySelectorAll("[data-event-id]")) {
+      const id = element.getAttribute("data-event-id");
+      if (id === null) continue;
+      const rectangle = element.getBoundingClientRect();
+      const overlaps =
+        rectangle.right >= left &&
+        rectangle.left <= right &&
+        rectangle.bottom >= top &&
+        rectangle.top <= bottom;
+      if (overlaps) caught.push(id);
+    }
+    return caught;
+  }
+
+  /* Ширина колонки: тягнеться від того місця, де взялись, а не «куди вказує
+     курсор» — інакше роздільник стрибав би до вказівника на першому ж пікселі. */
+  let widthDrag: { startClientX: number; startWidth: number } | null = null;
+
+  function beginWidthDrag(nativeEvent: PointerEvent): void {
+    nativeEvent.preventDefault();
+    widthDrag = {
+      startClientX: nativeEvent.clientX,
+      startWidth: timeline.trackHeadWidthPixels,
+    };
+    (nativeEvent.currentTarget as Element).setPointerCapture(nativeEvent.pointerId);
+  }
+
+  function onWidthDrag(nativeEvent: PointerEvent): void {
+    const active = widthDrag;
+    if (active === null) return;
+    timeline.setTrackHeadWidth(active.startWidth + (nativeEvent.clientX - active.startClientX));
+  }
+
+  function endWidthDrag(): void {
+    widthDrag = null;
+  }
+
   function onPointerMove(nativeEvent: PointerEvent): void {
     /* Рух рахується лише всередині жесту: просте водіння мишею по полотну не
        має вважатися перетягуванням. */
-    const gestureActive = creation !== null || timeline.drag !== null;
+    const gestureActive = creation !== null || marquee !== null || timeline.drag !== null;
     if (gestureActive && Math.abs(nativeEvent.clientX - pointerStartX) > DRAG_THRESHOLD_PIXELS) {
       pointerMoved = true;
+    }
+
+    if (marquee !== null) {
+      marquee = { ...marquee, toX: nativeEvent.clientX, toY: nativeEvent.clientY };
+      return;
     }
 
     if (creation !== null) {
@@ -136,6 +215,15 @@
 
   function onPointerUp(): void {
     suppressDoubleClick = pointerMoved;
+
+    if (marquee !== null) {
+      const box = marquee;
+      marquee = null;
+      /* Рамка ЗАВЖДИ доливає до набору: її кличуть Shift-ом, а Shift скрізь у
+         застосунку означає «додати до вже обраного». */
+      timeline.selectEvents(eventsWithin(box), { add: true });
+      return;
+    }
 
     if (creation !== null) {
       const { trackId, anchorDay, currentDay } = creation;
@@ -228,7 +316,7 @@
     if (nativeEvent.ctrlKey) {
       nativeEvent.preventDefault();
       const viewportX = nativeEvent.clientX - scroller.getBoundingClientRect().left;
-      const bodyPixel = scroller.scrollLeft + viewportX - TRACK_HEAD_WIDTH_PIXELS;
+      const bodyPixel = scroller.scrollLeft + viewportX - timeline.trackHeadWidthPixels;
       const anchorDay = pixelToDay(timeline.domain, timeline.pixelsPerDay, bodyPixel);
 
       timeline.setScale(timeline.pixelsPerDay * Math.pow(ZOOM_WHEEL_BASE, -step), {
@@ -244,7 +332,7 @@
   }
 
   function reportScroll(): void {
-    timeline.reportScroll(scroller.scrollLeft - TRACK_HEAD_WIDTH_PIXELS, scroller.clientWidth);
+    timeline.reportScroll(scroller.scrollLeft - timeline.trackHeadWidthPixels, scroller.clientWidth);
   }
 
   let scrollScheduled = false;
@@ -270,7 +358,7 @@
       await tick();
       scroller.scrollLeft =
         dayToPixel(timeline.domain, timeline.pixelsPerDay, target.day) +
-        TRACK_HEAD_WIDTH_PIXELS -
+        timeline.trackHeadWidthPixels -
         target.viewportPixel;
       reportScroll();
     })();
@@ -300,6 +388,7 @@
 
 <svelte:window onpointerup={onPointerUp} />
 
+<div class="canvas-area">
 <div
   class="scroller"
   bind:this={scroller}
@@ -311,7 +400,7 @@
   role="application"
   aria-label="Часова шкала"
 >
-  <div class="canvas" style:width="{TRACK_HEAD_WIDTH_PIXELS + timeline.canvasWidthPixels}px">
+  <div class="canvas" style:width="{timeline.trackHeadWidthPixels + timeline.canvasWidthPixels}px">
     <div class="ruler-row">
       <div class="ruler-corner">Доріжки</div>
       <Ruler />
@@ -333,7 +422,74 @@
   </div>
 </div>
 
+<!-- Роздільник липне до правого краю колонки з назвами. Поза прокруткою, бо
+     сама колонка теж не їде: вона sticky. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="head-divider"
+  style:left="{timeline.trackHeadWidthPixels}px"
+  title="Тягнути — ширина колонки з назвами"
+  onpointerdown={beginWidthDrag}
+  onpointermove={onWidthDrag}
+  onpointerup={endWidthDrag}
+  onpointercancel={endWidthDrag}
+></div>
+</div>
+
+{#if marquee !== null}
+  <div
+    class="marquee"
+    style:left="{Math.min(marquee.fromX, marquee.toX)}px"
+    style:top="{Math.min(marquee.fromY, marquee.toY)}px"
+    style:width="{Math.abs(marquee.toX - marquee.fromX)}px"
+    style:height="{Math.abs(marquee.toY - marquee.fromY)}px"
+  ></div>
+{/if}
+
 <style>
+  /* Рамка виділення й роздільник живуть у координатах вікна: перша — бо в них
+     лежать прямокутники подій, другий — бо колонка з назвами sticky й з
+     прокруткою не їде. */
+  .marquee {
+    position: fixed;
+    z-index: 20;
+    pointer-events: none;
+    border: 1px solid var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    border-radius: 2px;
+  }
+
+  /* Контейнер для роздільника: без нього `absolute` рахувався б від сторінки,
+     і смуга простяглася б через шапку та підвал. */
+  .canvas-area {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .head-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 7px;
+    translate: -3px 0;
+    z-index: 6;
+    cursor: ew-resize;
+  }
+
+  .head-divider::after {
+    content: "";
+    position: absolute;
+    inset: 0 3px;
+    background: var(--color-accent);
+    opacity: 0;
+  }
+
+  .head-divider:hover::after {
+    opacity: 0.55;
+  }
+
   .scroller {
     overflow: auto;
     position: relative;

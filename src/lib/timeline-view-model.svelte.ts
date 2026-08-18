@@ -1,4 +1,9 @@
 import { SnapshotHistory } from "./history/snapshot-history";
+import {
+  DEFAULT_TRACK_HEAD_WIDTH,
+  MAX_TRACK_HEAD_WIDTH,
+  MIN_TRACK_HEAD_WIDTH,
+} from "./layout/row-geometry";
 import { OVERLAP_MODE, type OverlapMode } from "./layout/track-layout";
 import {
   createEmptyDocument,
@@ -6,6 +11,8 @@ import {
   createTrack,
   COLOR_INHERIT,
   EVENT_KIND,
+  MAX_TRACK_HEIGHT,
+  MIN_TRACK_HEIGHT,
   type DocumentBounds,
   type EventKind,
   type TimelineDocument,
@@ -49,9 +56,10 @@ export const DRAG_KIND = {
 export type DragKind = (typeof DRAG_KIND)[keyof typeof DRAG_KIND];
 
 /**
- * Обрати можна подію АБО доріжку — інспектор показує властивості того, що
- * обрано. Іменований союз замість двох полів `selectedEventId`/`selectedTrackId`:
- * обрано завжди рівно одне, і тип має це стверджувати.
+ * Обрані можуть бути події АБО доріжки, але ніколи вперемішку: панель показує
+ * спільні властивості обраного, а спільних властивостей у події й доріжки
+ * немає. Іменований союз замість двох полів `selectedEventIds`/`selectedTrackIds`
+ * саме тому — тип стверджує, що рід рівно один.
  */
 export const SELECTION_KIND = {
   Event: "event",
@@ -61,19 +69,35 @@ export type SelectionKind = (typeof SELECTION_KIND)[keyof typeof SELECTION_KIND]
 
 export interface Selection {
   kind: SelectionKind;
-  id: string;
+  /** Порядок збережено: він вирішує, що вважати «першим» обраним. */
+  ids: string[];
+}
+
+/** Додавати до вже обраного чи почати наново. Іменований прапорець, не позиційний. */
+export interface SelectOptions {
+  add: boolean;
 }
 
 /** Скільки триває «серія» правок, які лягають в один крок історії. */
 const COALESCE_WINDOW_MS = 600;
 
-/** Стан перетягування — один об'єкт, а не розсип полів. */
-export interface DragSession {
-  kind: DragKind;
-  eventId: string;
+/** Одна подія в перетягуванні: її межі на момент початку жесту. */
+export interface DraggedEvent {
+  id: string;
   /** Дні на момент початку — усі зсуви рахуються від них, не накопичуючись. */
   originalStartDay: DayNumber;
   originalEndDay: DayNumber;
+  /** Місце доріжки на момент початку: гурт переїжджає на стільки ж рядків. */
+  originalTrackIndex: number;
+}
+
+/** Стан перетягування — один об'єкт, а не розсип полів. */
+export interface DragSession {
+  kind: DragKind;
+  /** Подія, за яку взялись: саме її позиція вирішує, куди їде решта. */
+  grabbedId: string;
+  /** Усе, що рухається: взята подія та решта обраних разом із нею. */
+  events: DraggedEvent[];
   /** Чи вже щось справді змінилось, тобто чи вже записано крок історії. */
   changed: boolean;
 }
@@ -86,6 +110,7 @@ class TimelineViewModel {
   #pixelsPerDay = $state(1.4);
   #overlapMode = $state<OverlapMode>(OVERLAP_MODE.Overlay);
   #domain = $state<TimeDomain>(defaultDomain());
+  #trackHeadWidthPixels = $state(DEFAULT_TRACK_HEAD_WIDTH);
   #selection = $state<Selection | null>(null);
   #renamingEventId = $state<string | null>(null);
   #drag = $state<DragSession | null>(null);
@@ -134,24 +159,84 @@ class TimelineViewModel {
     return this.#selection;
   }
 
-  get selectedEvent(): TimelineEvent | null {
+  #selectedIds(kind: SelectionKind): string[] {
     const selection = this.#selection;
-    if (selection === null || selection.kind !== SELECTION_KIND.Event) return null;
-    return this.#document.events.find((event) => event.id === selection.id) ?? null;
+    if (selection === null || selection.kind !== kind) return [];
+    return selection.ids;
+  }
+
+  get selectedEvents(): TimelineEvent[] {
+    const ids = new Set(this.#selectedIds(SELECTION_KIND.Event));
+    if (ids.size === 0) return [];
+    return this.#document.events.filter((event) => ids.has(event.id));
+  }
+
+  get selectedTracks(): Track[] {
+    const ids = new Set(this.#selectedIds(SELECTION_KIND.Track));
+    if (ids.size === 0) return [];
+    return this.#document.tracks.filter((track) => ids.has(track.id));
+  }
+
+  /** Подія, коли обрана РІВНО одна: для дій, які на гурті не мають сенсу. */
+  get selectedEvent(): TimelineEvent | null {
+    const events = this.selectedEvents;
+    return events.length === 1 ? (events[0] ?? null) : null;
   }
 
   get selectedTrack(): Track | null {
-    const selection = this.#selection;
-    if (selection === null || selection.kind !== SELECTION_KIND.Track) return null;
-    return this.trackById(selection.id);
+    const tracks = this.selectedTracks;
+    return tracks.length === 1 ? (tracks[0] ?? null) : null;
   }
 
-  selectEvent(eventId: string): void {
-    this.#selection = { kind: SELECTION_KIND.Event, id: eventId };
+  isEventSelected(eventId: string): boolean {
+    return this.#selectedIds(SELECTION_KIND.Event).includes(eventId);
   }
 
-  selectTrack(trackId: string): void {
-    this.#selection = { kind: SELECTION_KIND.Track, id: trackId };
+  isTrackSelected(trackId: string): boolean {
+    return this.#selectedIds(SELECTION_KIND.Track).includes(trackId);
+  }
+
+  /**
+   * Додавання перемикає: Shift по вже обраному прибирає його з набору. Це
+   * очікувана поведінка скрізь, де є Shift-клік, і без неї зняти зайве можна
+   * було б лише почавши виділення спочатку.
+   */
+  #select(kind: SelectionKind, id: string, options: SelectOptions): void {
+    const current = this.#selection;
+    const sameKind = current !== null && current.kind === kind;
+
+    if (!options.add || !sameKind) {
+      this.#selection = { kind, ids: [id] };
+      return;
+    }
+    const ids = current.ids.includes(id)
+      ? current.ids.filter((existing) => existing !== id)
+      : [...current.ids, id];
+    this.#selection = ids.length === 0 ? null : { kind, ids };
+  }
+
+  selectEvent(eventId: string, options: SelectOptions = { add: false }): void {
+    this.#select(SELECTION_KIND.Event, eventId, options);
+  }
+
+  selectTrack(trackId: string, options: SelectOptions = { add: false }): void {
+    this.#select(SELECTION_KIND.Track, trackId, options);
+    this.#renamingEventId = null;
+  }
+
+  /** Рамкою виділення: замінює набір цілком або доливає до нього. */
+  selectEvents(eventIds: readonly string[], options: SelectOptions): void {
+    if (eventIds.length === 0) {
+      if (!options.add) this.clearSelection();
+      return;
+    }
+    const current = this.#selection;
+    const existing =
+      options.add && current !== null && current.kind === SELECTION_KIND.Event ? current.ids : [];
+    this.#selection = {
+      kind: SELECTION_KIND.Event,
+      ids: [...new Set([...existing, ...eventIds])],
+    };
     this.#renamingEventId = null;
   }
 
@@ -258,15 +343,19 @@ class TimelineViewModel {
     this.#dropSelectionIfGone();
   }
 
-  /** Після відкату обране могло зникнути з документа. */
+  /** Після відкату частина обраного могла зникнути з документа. */
   #dropSelectionIfGone(): void {
     const selection = this.#selection;
     if (selection === null) return;
-    const stillThere =
+    const alive = new Set(
       selection.kind === SELECTION_KIND.Event
-        ? this.selectedEvent !== null
-        : this.selectedTrack !== null;
-    if (!stillThere) this.clearSelection();
+        ? this.#document.events.map((event) => event.id)
+        : this.#document.tracks.map((track) => track.id),
+    );
+    const ids = selection.ids.filter((id) => alive.has(id));
+    if (ids.length === selection.ids.length) return;
+    this.#selection = ids.length === 0 ? null : { kind: selection.kind, ids };
+    if (ids.length === 0) this.#renamingEventId = null;
   }
 
   // ── Події ─────────────────────────────────────────────────────────────────
@@ -309,9 +398,34 @@ class TimelineViewModel {
   }
 
   deleteEvent(eventId: string): void {
+    this.deleteEvents([eventId]);
+  }
+
+  deleteEvents(eventIds: readonly string[]): void {
+    if (eventIds.length === 0) return;
     this.beginChange();
-    this.#document.events = this.#document.events.filter((event) => event.id !== eventId);
-    if (this.#selection?.id === eventId) this.clearSelection();
+    const doomed = new Set(eventIds);
+    this.#document.events = this.#document.events.filter((event) => !doomed.has(event.id));
+    this.#dropSelectionIfGone();
+  }
+
+  /** Правка гуртом: те саме поле в кожній обраній події, одним кроком історії. */
+  updateSelectedEvents(patch: Partial<Omit<TimelineEvent, "id">>, coalesceKey?: string): void {
+    const events = this.selectedEvents;
+    if (events.length === 0) return;
+    this.beginChange(coalesceKey);
+    for (const event of events) this.updateEvent(event.id, patch);
+  }
+
+  /** Видаляє обране, чим би воно не було. Одна дія для Del і для кнопки. */
+  deleteSelection(): void {
+    const selection = this.#selection;
+    if (selection === null) return;
+    if (selection.kind === SELECTION_KIND.Event) {
+      this.deleteEvents(selection.ids);
+      return;
+    }
+    for (const id of selection.ids) this.removeTrack(id);
   }
 
   // ── Доріжки ───────────────────────────────────────────────────────────────
@@ -335,6 +449,50 @@ class TimelineViewModel {
     this.#dropSelectionIfGone();
   }
 
+  /**
+   * Висота під час перетягування шле подію на кожен піксель, тож ключ склеювання
+   * тут обов'язковий — інакше один рух краю з'їдав би всю історію.
+   */
+  setTrackHeight(trackId: string, height: number): void {
+    const clamped = Math.min(MAX_TRACK_HEIGHT, Math.max(MIN_TRACK_HEIGHT, Math.round(height)));
+    const track = this.trackById(trackId);
+    if (track === null || track.height === clamped) return;
+    this.beginChange(`height:${trackId}`);
+    track.height = clamped;
+  }
+
+  /** Переставляє доріжку на місце `toIndex`; порядок масиву і є порядком на екрані. */
+  moveTrack(trackId: string, toIndex: number): void {
+    const from = this.#trackIndex(trackId);
+    const to = Math.min(this.#document.tracks.length - 1, Math.max(0, toIndex));
+    if (from < 0 || from === to) return;
+    this.beginChange();
+    const tracks = [...this.#document.tracks];
+    const [moved] = tracks.splice(from, 1);
+    if (moved === undefined) return;
+    tracks.splice(to, 0, moved);
+    this.#document.tracks = tracks;
+  }
+
+  trackIndexOf(trackId: string): number {
+    return this.#trackIndex(trackId);
+  }
+
+  /**
+   * Ширина колонки з назвами — стан ВІКНА, а не документа: вона описує, як
+   * зручно дивитись, і в файл не потрапляє.
+   */
+  get trackHeadWidthPixels(): number {
+    return this.#trackHeadWidthPixels;
+  }
+
+  setTrackHeadWidth(pixels: number): void {
+    this.#trackHeadWidthPixels = Math.min(
+      MAX_TRACK_HEAD_WIDTH,
+      Math.max(MIN_TRACK_HEAD_WIDTH, Math.round(pixels)),
+    );
+  }
+
 
   // ── Перетягування ─────────────────────────────────────────────────────────
 
@@ -348,36 +506,89 @@ class TimelineViewModel {
    * крок історії тут не записується, інакше кожен клік по події клав у неї
    * порожній запис, і Ctrl+Z починав «нічого не робити» по десять разів.
    */
-  beginDrag(session: Omit<DragSession, "changed">): void {
-    this.#drag = { ...session, changed: false };
+  /**
+   * Рухається весь обраний гурт, якщо взялись за одну з обраних подій. Взялись
+   * за сторонню — рухається лише вона, а виділення до цього діла не має.
+   */
+  beginDrag(options: { kind: DragKind; grabbedId: string }): void {
+    const moving = this.isEventSelected(options.grabbedId)
+      ? this.selectedEvents
+      : this.#document.events.filter((event) => event.id === options.grabbedId);
+
+    const indexByTrackId = new Map(this.#document.tracks.map((track, index) => [track.id, index]));
+    this.#drag = {
+      kind: options.kind,
+      grabbedId: options.grabbedId,
+      events: moving.flatMap((event) => {
+        const originalTrackIndex = indexByTrackId.get(event.trackId);
+        if (originalTrackIndex === undefined) return [];
+        return [
+          {
+            id: event.id,
+            originalStartDay: isoToDayNumber(event.start),
+            originalEndDay: isoToDayNumber(event.end),
+            originalTrackIndex,
+          },
+        ];
+      }),
+      changed: false,
+    };
   }
 
+  /**
+   * Гурт переїжджає на стільки ж рядків, на скільки поїхала взята подія, а не
+   * на ту доріжку, під якою опинився курсор: інакше все обране злиплося б в
+   * один рядок. Хто впирається в край — там і лишається.
+   */
   dragBy(dayOffset: number, overTrackId: string | null): void {
     const session = this.#drag;
     if (session === null) return;
-    const event = this.#document.events.find((candidate) => candidate.id === session.eventId);
-    if (!event) return;
+    const grabbed = session.events.find((candidate) => candidate.id === session.grabbedId);
+    if (grabbed === undefined) return;
 
-    const changesTrack =
-      session.kind === DRAG_KIND.Move && overTrackId !== null && overTrackId !== event.trackId;
+    const overIndex = overTrackId === null ? -1 : this.#trackIndex(overTrackId);
+    const trackOffset =
+      session.kind === DRAG_KIND.Move && overIndex >= 0 ? overIndex - grabbed.originalTrackIndex : 0;
+
     /* Поки нічого не зрушило — не чіпаємо ні документ, ні історію. */
-    if (!session.changed && dayOffset === 0 && !changesTrack) return;
+    if (!session.changed && dayOffset === 0 && trackOffset === 0) return;
     if (!session.changed) {
       /* Один крок на все перетягування: далі йдуть кадри, а не окремі дії. */
       this.beginChange();
       session.changed = true;
     }
 
-    if (session.kind === DRAG_KIND.Move) {
-      event.start = dayNumberToIso(session.originalStartDay + dayOffset);
-      event.end = dayNumberToIso(session.originalEndDay + dayOffset);
-      if (overTrackId !== null) event.trackId = overTrackId;
-    } else if (session.kind === DRAG_KIND.ResizeStart) {
-      event.start = dayNumberToIso(Math.min(session.originalStartDay + dayOffset, session.originalEndDay));
-    } else if (session.kind === DRAG_KIND.ResizeEnd) {
-      event.end = dayNumberToIso(Math.max(session.originalEndDay + dayOffset, session.originalStartDay));
+    const lastTrackIndex = this.#document.tracks.length - 1;
+    for (const dragged of session.events) {
+      const event = this.#document.events.find((candidate) => candidate.id === dragged.id);
+      if (!event) continue;
+
+      if (session.kind === DRAG_KIND.Move) {
+        event.start = dayNumberToIso(dragged.originalStartDay + dayOffset);
+        event.end = dayNumberToIso(dragged.originalEndDay + dayOffset);
+        if (trackOffset !== 0) {
+          const index = Math.min(
+            lastTrackIndex,
+            Math.max(0, dragged.originalTrackIndex + trackOffset),
+          );
+          const track = this.#document.tracks[index];
+          if (track) event.trackId = track.id;
+        }
+      } else if (session.kind === DRAG_KIND.ResizeStart) {
+        event.start = dayNumberToIso(
+          Math.min(dragged.originalStartDay + dayOffset, dragged.originalEndDay),
+        );
+      } else if (session.kind === DRAG_KIND.ResizeEnd) {
+        event.end = dayNumberToIso(
+          Math.max(dragged.originalEndDay + dayOffset, dragged.originalStartDay),
+        );
+      }
+      this.ensureDomainCovers(isoToDayNumber(event.start), isoToDayNumber(event.end));
     }
-    this.ensureDomainCovers(isoToDayNumber(event.start), isoToDayNumber(event.end));
+  }
+
+  #trackIndex(trackId: string): number {
+    return this.#document.tracks.findIndex((track) => track.id === trackId);
   }
 
   endDrag(): void {

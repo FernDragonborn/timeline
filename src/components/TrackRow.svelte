@@ -1,6 +1,11 @@
 <script lang="ts">
   import { createLabelMeasurer } from "../lib/layout/measure-text";
-  import { blockRectangle, labelPosition, rowHeight } from "../lib/layout/row-geometry";
+  import {
+    blockRectangle,
+    labelPosition,
+    rowHeight,
+    type RowGeometry,
+  } from "../lib/layout/row-geometry";
   import { OVERLAP_MODE, planTrackLayout, type EventPlacement } from "../lib/layout/track-layout";
   import {
     EVENT_KIND,
@@ -25,14 +30,82 @@
       measureLabelWidth: measureLabel,
     }),
   );
-  const height = $derived(rowHeight(timeline.overlapMode, layout.laneCount));
+  const height = $derived(rowHeight(timeline.overlapMode, layout.laneCount, track.height));
   const isStacked = $derived(timeline.overlapMode === OVERLAP_MODE.Stack);
 
-  const rectangleOf = (placement: EventPlacement) =>
-    blockRectangle(placement, timeline.overlapMode, timeline.domain, timeline.pixelsPerDay);
-  const labelOf = (placement: EventPlacement) =>
-    labelPosition(placement, timeline.overlapMode, timeline.domain, timeline.pixelsPerDay);
+  const geometry = $derived<RowGeometry>({
+    mode: timeline.overlapMode,
+    domain: timeline.domain,
+    pixelsPerDay: timeline.pixelsPerDay,
+    trackHeight: height,
+  });
+
+  const rectangleOf = (placement: EventPlacement) => blockRectangle(placement, geometry);
+  const labelOf = (placement: EventPlacement) => labelPosition(placement, geometry);
   const colourOf = (placement: EventPlacement) => resolveEventColor(placement.event, track);
+
+  /** Що саме тягнуть за шапку. Іменований союз, не два прапорці. */
+  const HEAD_GESTURE = {
+    /** Нижній край — висота доріжки. */
+    Height: "height",
+    /** Держак ліворуч — місце доріжки серед інших. */
+    Reorder: "reorder",
+  } as const;
+  type HeadGestureKind = (typeof HEAD_GESTURE)[keyof typeof HEAD_GESTURE];
+
+  interface HeadGesture {
+    kind: HeadGestureKind;
+    startClientY: number;
+    startHeight: number;
+  }
+  let gesture: HeadGesture | null = null;
+
+  function beginHeadGesture(kind: HeadGestureKind, nativeEvent: PointerEvent): void {
+    nativeEvent.preventDefault();
+    nativeEvent.stopPropagation();
+    gesture = { kind, startClientY: nativeEvent.clientY, startHeight: track.height };
+    (nativeEvent.currentTarget as Element).setPointerCapture(nativeEvent.pointerId);
+  }
+
+  function onHeadPointerMove(nativeEvent: PointerEvent): void {
+    const active = gesture;
+    if (active === null) return;
+
+    if (active.kind === HEAD_GESTURE.Height) {
+      timeline.setTrackHeight(track.id, active.startHeight + (nativeEvent.clientY - active.startClientY));
+      return;
+    }
+    const overIndex = trackIndexAtClientY(nativeEvent.clientY);
+    if (overIndex >= 0) timeline.moveTrack(track.id, overIndex);
+  }
+
+  function endHeadGesture(): void {
+    gesture = null;
+  }
+
+  /**
+   * Яка доріжка під курсором. Читаємо прямокутники самих рядків, а не рахуємо
+   * висоти: вони тепер у кожної доріжки свої, і повторювати цю арифметику тут
+   * означало б завести їй друге, розбіжне джерело.
+   */
+  function trackIndexAtClientY(clientY: number): number {
+    const rows = document.querySelectorAll("[data-track-id]");
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      if (row === undefined) continue;
+      const box = row.getBoundingClientRect();
+      if (clientY >= box.top && clientY <= box.bottom) return index;
+    }
+    return -1;
+  }
+
+  /** Shift по шапці додає доріжку до виділення або прибирає з нього. */
+  function onHeadPointerDown(nativeEvent: PointerEvent): void {
+    if (!nativeEvent.shiftKey) return;
+    /* Інакше натискання поставило б курсор у поле назви замість виділення. */
+    nativeEvent.preventDefault();
+    timeline.selectTrack(track.id, { add: true });
+  }
   function focusAndSelect(element: HTMLInputElement): void {
     element.focus();
     element.select();
@@ -70,11 +143,25 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="head"
-    class:selected={timeline.selectedTrack?.id === track.id}
-    title="Подвійний клік — властивості доріжки"
+    class:selected={timeline.isTrackSelected(track.id)}
+    title="Подвійний клік — властивості доріжки, Shift+клік — виділити"
+    onpointerdown={onHeadPointerDown}
     ondblclick={() => timeline.selectTrack(track.id)}
   >
-    <span class="stripe" style:--track-colour={track.color}></span>
+    <!-- Держак: смужка кольору доріжки й нею ж тягнемо порядок. Курсор і
+         крапки кажуть, що це ручка, а не просто позначка. -->
+    <span
+      class="stripe"
+      style:--track-colour={track.color}
+      title="Тягнути — змінити місце доріжки"
+      onpointerdown={(nativeEvent) => beginHeadGesture(HEAD_GESTURE.Reorder, nativeEvent)}
+      onpointermove={onHeadPointerMove}
+      onpointerup={endHeadGesture}
+      onpointercancel={endHeadGesture}
+      role="button"
+      tabindex="-1"
+      aria-label="Змінити місце доріжки"
+    ></span>
     <input
       class="name"
       value={track.name}
@@ -85,6 +172,16 @@
       }}
     />
     <span class="count">{layout.placements.length}</span>
+
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="height-grip"
+      title="Тягнути — висота доріжки"
+      onpointerdown={(nativeEvent) => beginHeadGesture(HEAD_GESTURE.Height, nativeEvent)}
+      onpointermove={onHeadPointerMove}
+      onpointerup={endHeadGesture}
+      onpointercancel={endHeadGesture}
+    ></div>
   </div>
 
   <div class="body" style:width="{timeline.canvasWidthPixels}px" data-track-body={track.id}>
@@ -93,7 +190,7 @@
       <div
         class="event"
         class:point={placement.event.kind === EVENT_KIND.Point}
-        class:selected={timeline.selectedEvent?.id === placement.event.id}
+        class:selected={timeline.isEventSelected(placement.event.id)}
         data-event-id={placement.event.id}
         title={tooltipOf(placement)}
         style:--event-colour={colourOf(placement)}
@@ -170,11 +267,64 @@
     box-shadow: inset 2px 0 0 var(--color-accent);
   }
 
+  /* Смужка кольору — вона ж держак перестановки. Дві ролі на одному елементі
+     навмисно: окрема ручка з'їла б ширину колонки, яку й так тягнуть вужче. */
   .stripe {
-    width: 4px;
+    position: relative;
+    width: 8px;
     align-self: stretch;
     margin-right: 4px;
     background: var(--track-colour);
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .stripe:active {
+    cursor: grabbing;
+  }
+
+  /* Крапки проступають на наведенні: до того смужка читається як позначка
+     кольору, і зайвий шум у спокої їй не потрібен. */
+  .stripe::after {
+    content: "";
+    position: absolute;
+    inset: 50% 2px auto;
+    height: 14px;
+    translate: 0 -50%;
+    opacity: 0;
+    background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+    background-size: 4px 4px;
+    color: var(--color-panel);
+  }
+
+  .head:hover .stripe::after {
+    opacity: 0.9;
+  }
+
+  /* Нижній край шапки тягне висоту. Зона влучання ширша за смугу, інакше в неї
+     треба цілитись пікселем. */
+  .height-grip {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 7px;
+    z-index: 4;
+    cursor: ns-resize;
+    touch-action: none;
+  }
+
+  .height-grip::after {
+    content: "";
+    position: absolute;
+    inset: 3px 0 auto;
+    height: 2px;
+    background: var(--color-accent);
+    opacity: 0;
+  }
+
+  .height-grip:hover::after {
+    opacity: 0.7;
   }
 
   .name {

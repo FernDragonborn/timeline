@@ -3,7 +3,6 @@
   import Inspector from "./components/Inspector.svelte";
   import TimelineCanvas from "./components/TimelineCanvas.svelte";
   import Toolbar from "./components/Toolbar.svelte";
-  import { TRACK_HEAD_WIDTH_PIXELS } from "./lib/layout/row-geometry";
   import { closeWindow } from "./lib/platform/desktop-window";
   import { serializeDocument } from "./lib/model/timeline-document";
   import {
@@ -14,6 +13,9 @@
   import { ZOOM_KEY_STEP } from "./lib/view/timeline-viewport";
 
   const THEME_KEY = "timeline.theme";
+  /* Ширина колонки описує вікно, а не дані, тож живе поруч із темою, а не в
+     документі. Той самий шлях: прочитати на старті, писати на зміну. */
+  const HEAD_WIDTH_KEY = "timeline.track-head-width";
   type Theme = "dark" | "light";
 
   function initialTheme(): Theme {
@@ -33,6 +35,9 @@
      тож їй місце в onMount. У $effect вона перезапускалася б щоразу, коли
      зачепить будь-який стан, який сама ж і міняє. */
   onMount(() => {
+    const storedWidth = Number(localStorage.getItem(HEAD_WIDTH_KEY));
+    if (Number.isFinite(storedWidth) && storedWidth > 0) timeline.setTrackHeadWidth(storedWidth);
+
     void documentFile.restoreSession();
 
     let unlisten: (() => void) | null = null;
@@ -51,6 +56,10 @@
   $effect(() => {
     void serializeDocument(timeline.document);
     untrack(() => documentFile.onDocumentChanged());
+  });
+
+  $effect(() => {
+    localStorage.setItem(HEAD_WIDTH_KEY, String(timeline.trackHeadWidthPixels));
   });
 
   function isTypingTarget(target: EventTarget | null): boolean {
@@ -120,15 +129,14 @@
       return;
     }
     if (nativeEvent.code === "Delete" || nativeEvent.code === "Backspace") {
-      const selected = timeline.selectedEvent;
-      if (selected !== null) timeline.deleteEvent(selected.id);
+      timeline.deleteSelection();
     }
   }
 </script>
 
 <svelte:window onkeydown={onKeyDown} />
 
-<div class="app" style:--track-head-width="{TRACK_HEAD_WIDTH_PIXELS}px">
+<div class="app" style:--track-head-width="{timeline.trackHeadWidthPixels}px">
   <Toolbar {theme} onToggleTheme={() => (theme = theme === "dark" ? "light" : "dark")} />
 
   <main>

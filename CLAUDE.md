@@ -153,7 +153,21 @@ Settled with the maintainer; changing any of these is a decision, not an impleme
   and the one they did edit kept its old date. Capture-phase `pointerdown` fires before the
   selection changes, so the commit still goes where it was meant to. The inspector also keys its
   date fields on the event id, so a different event can never inherit a dirty one.
-- **Tracks carry arbitrary user-editable names** and a colour; five by default, add/remove allowed.
+- **Tracks carry arbitrary user-editable names**, a colour and a height; five by default,
+  add/remove allowed. Height and order live **in the file** — "this track is the important one, make
+  it taller" and "these two belong next to each other" are statements about the data, and they must
+  survive a restart and travel with the document. Order simply *is* the order of the `tracks` array.
+  The width of the name column is the opposite case: it describes the window, not the data, so it is
+  view state kept in `localStorage` beside the theme.
+- **Selection is a set, and it is homogeneous** — either events or tracks, never mixed, because the
+  inspector shows the *shared* properties of what is selected and an event and a track share none.
+  Shift+click toggles (removing from a set otherwise needs starting over), Shift+drag on empty track
+  space draws a marquee. The group can do everything a single object can: name, track, kind, dates,
+  colour, note, delete, all applied to every member. A field whose values differ reads "різні".
+  Shift+pointerdown **must** `preventDefault` — to the browser it means "extend the text selection
+  from the caret", and without it the marquee drags a blue smear across half the app.
+- **A group moves by the same number of rows the grabbed event moved**, not onto the track under the
+  cursor — otherwise everything selected collapses into one row. Whoever hits the end stays there.
 - **The document may declare its own start and end** (`bounds`, `null` when unbounded). When set,
   they replace the free domain outright: scrolling stops there and clicks outside cannot create
   events. They live in the file, because "this timeline covers 1914–1918" is a property of the
@@ -170,7 +184,7 @@ The file on disk is the model. Both formats round-trip the same data; JSON is au
 ```jsonc
 {
   "version": 1,
-  "tracks": [{ "id": "t1", "name": "Дослідження", "color": "#5B8DEF" }],
+  "tracks": [{ "id": "t1", "name": "Дослідження", "color": "#5B8DEF", "height": 66 }],
   "events": [{
     "id": "e1", "trackId": "t1",
     "start": "2026-01-08", "end": "2026-03-20",   // inclusive

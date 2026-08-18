@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { PALETTE, type Track } from "../lib/model/timeline-document";
+  import {
+    MAX_TRACK_HEIGHT,
+    MIN_TRACK_HEIGHT,
+    PALETTE,
+    type Track,
+  } from "../lib/model/timeline-document";
   import { timeline } from "../lib/timeline-view-model.svelte";
 
   interface Props {
@@ -64,8 +69,20 @@
   </div>
 </div>
 
+<label class="insp-field">
+  <span>Висота, px</span>
+  <input
+    type="number"
+    min={MIN_TRACK_HEIGHT}
+    max={MAX_TRACK_HEIGHT}
+    value={track.height}
+    onchange={(e) => timeline.setTrackHeight(track.id, Number(e.currentTarget.value))}
+  />
+</label>
+
 <p class="insp-meta">
-  {eventCount} подій на доріжці. Кожна бере цей колір, поки їй не задано власний.
+  {eventCount} подій на доріжці. Кожна бере цей колір, поки їй не задано власний.<br />
+  Висоту можна тягнути за нижній край шапки, а місце доріжки — за кольорову смужку.
 </p>
 
 <div class="insp-spacer"></div>

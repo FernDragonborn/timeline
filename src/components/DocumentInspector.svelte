@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatDaySpan, isoToDayNumber } from "../lib/time/day-number";
   import { timeline } from "../lib/timeline-view-model.svelte";
+  import DateField from "./DateField.svelte";
 
   const bounds = $derived(timeline.document.bounds);
 
@@ -38,14 +39,22 @@
   </p>
 {:else}
   <div class="insp-two">
-    <label class="insp-field">
+    <div class="insp-field">
       <span>Початок</span>
-      <input type="date" value={bounds.start} onchange={(e) => setStart(e.currentTarget.value)} />
-    </label>
-    <label class="insp-field">
+      <DateField
+        value={bounds.start}
+        title="День, місяць, рік. Приймає і 20.03.2026, і 2026-03-20"
+        onCommit={setStart}
+      />
+    </div>
+    <div class="insp-field">
       <span>Кінець</span>
-      <input type="date" value={bounds.end} onchange={(e) => setEnd(e.currentTarget.value)} />
-    </label>
+      <DateField
+        value={bounds.end}
+        title="День, місяць, рік. Приймає і 20.03.2026, і 2026-03-20"
+        onCommit={setEnd}
+      />
+    </div>
   </div>
   <p class="insp-meta">
     {formatDaySpan(isoToDayNumber(bounds.start), isoToDayNumber(bounds.end))}<br />

@@ -8,6 +8,7 @@
   } from "../lib/model/timeline-document";
   import { formatDaySpan, isoToDayNumber } from "../lib/time/day-number";
   import { timeline } from "../lib/timeline-view-model.svelte";
+  import DateField from "./DateField.svelte";
 
   interface Props {
     event: TimelineEvent;
@@ -69,23 +70,23 @@
 </div>
 
 <div class="insp-two">
-  <label class="insp-field">
+  <div class="insp-field">
     <span>{event.kind === EVENT_KIND.Point ? "Дата" : "Початок"}</span>
-    <input
-      type="date"
+    <DateField
       value={event.start}
-      onchange={(e) => e.currentTarget.value && edit({ start: e.currentTarget.value })}
+      title="День, місяць, рік. Приймає і 20.03.2026, і 2026-03-20"
+      onCommit={(iso) => edit({ start: iso })}
     />
-  </label>
+  </div>
   {#if event.kind !== EVENT_KIND.Point}
-    <label class="insp-field">
+    <div class="insp-field">
       <span>Кінець</span>
-      <input
-        type="date"
+      <DateField
         value={event.end}
-        onchange={(e) => e.currentTarget.value && edit({ end: e.currentTarget.value })}
+        title="День, місяць, рік. Приймає і 20.03.2026, і 2026-03-20"
+        onCommit={(iso) => edit({ end: iso })}
       />
-    </label>
+    </div>
   {/if}
 </div>
 

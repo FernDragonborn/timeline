@@ -1,10 +1,15 @@
 <script lang="ts">
   import { OVERLAP_MODE } from "../lib/layout/track-layout";
-  import { isoToDayNumber } from "../lib/time/day-number";
+  import { dayNumberToIso, isoToDayNumber, today } from "../lib/time/day-number";
   import { RULER_TIER_LABEL } from "../lib/time/ruler";
   import { documentFile, SAVE_STATUS } from "../lib/storage/document-file-controller.svelte";
   import { timeline } from "../lib/timeline-view-model.svelte";
   import { scaleToSlider, SLIDER_MAX, sliderToScale } from "../lib/view/timeline-viewport";
+  import DateField from "./DateField.svelte";
+
+  /* Поле переходу тримає власне значення: воно каже, куди ЙТИ, а не де ми
+     зараз, тож за прокруткою не бігає. */
+  let gotoValue = $state(dayNumberToIso(today()));
 
   interface Props {
     theme: "dark" | "light";
@@ -71,17 +76,17 @@
 
   <div class="spacer"></div>
 
-  <label class="goto">
+  <div class="goto">
     <span>Перейти до</span>
-    <input
-      type="date"
+    <DateField
+      value={gotoValue}
       title="Будь-яка дата — шкала розсунеться до неї"
-      onchange={(nativeEvent) => {
-        const value = nativeEvent.currentTarget.value;
-        if (value) timeline.requestScrollTo(isoToDayNumber(value));
+      onCommit={(iso) => {
+        gotoValue = iso;
+        timeline.requestScrollTo(isoToDayNumber(iso));
       }}
     />
-  </label>
+  </div>
   <button onclick={() => timeline.goToToday()}>Сьогодні</button>
   <button onclick={onToggleTheme}>{theme === "dark" ? "Світла" : "Темна"}</button>
 </header>
@@ -189,12 +194,11 @@
     color: var(--color-text-muted);
   }
 
-  .goto input {
+  /* Поле дати — власний компонент, тож дотягуємось до його кореня. Звужено до
+     `.goto`, щоб правило не поїхало на поля дат у бічній панелі. */
+  .goto :global(.date-field) {
+    width: 132px;
     background: var(--color-panel-raised);
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius);
-    padding: 4px 7px;
-    cursor: pointer;
   }
 
   .segmented {

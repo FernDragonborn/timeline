@@ -16,7 +16,8 @@
         "width": 1440,
         "height": 900,
         "minWidth": 900,
-        "minHeight": 520
+        "minHeight": 520,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --lang=uk-UA"
       }
     ],
     "security": {

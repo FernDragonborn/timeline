@@ -260,6 +260,12 @@ Rules that govern it:
 - **Keyboard shortcuts match the physical key** — compare `event.code` (`"KeyZ"`, `"KeyS"`), never
   `event.key`. On a Cyrillic layout `key` for the Z key is `"я"`, so every letter-based check
   silently stops working for exactly the person this app is written for.
+- **A native control's date format follows the browser's UI language and nothing else.** Not
+  `<html lang>`, not `navigator.language`, not the OS regional format — all three were measured and
+  none of them moves it. That is why the app looked American on a machine whose regional format is
+  Ukrainian: WebView2 takes its language from the Windows *display* language. The lever is the
+  `--lang` browser argument, passed through `additionalBrowserArgs` in `tauri.conf.json` (Windows
+  only, and it replaces wry's default `--disable-features=…`, which must be repeated by hand).
 - **Ukrainian UI copy uses formal "ви"** — «використовуйте», not «використовуй». Prefer impersonal
   phrasing where it reads naturally. This governs product copy only, not chat.
 

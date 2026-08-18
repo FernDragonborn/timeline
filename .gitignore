@@ -1,0 +1,17 @@
+node_modules
+/dist
+/src-tauri/target
+/src-tauri/gen/schemas
+
+.DS_Store
+.env
+.env.*
+!.env.example
+vite.config.ts.timestamp-*
+
+# Документ, який застосунок зберіг усередині проєкту під час розробки. Це дані
+# користувача, а не фікстура — у репозиторії їм не місце.
+/src-tauri/timeline.json
+
+# Локальні налаштування Claude Code: у кожного свої, спільними бути не мусять.
+.claude/settings.local.json

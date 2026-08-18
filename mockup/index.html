@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timeline — макет</title>
+<style>
+/* ============================================================
+   ТОКЕНИ
+   ============================================================ */
+:root {
+  --bg:        #0F1115;
+  --panel:     #151920;
+  --panel-2:   #1B2029;
+  --line:      #262C36;
+  --line-soft: #1E232B;
+  --text:      #E6E9EF;
+  --muted:     #858E9E;
+  --accent:    #7AA2F7;
+  --blend:     screen;
+  --fill-a:    0.30;
+  --today:     #E0687A;
+
+  --head-w:    168px;
+  --row-h:     66px;
+  --lane-h:    24px;
+  --ruler-h:   48px;
+  --radius:    5px;
+}
+:root[data-theme="light"] {
+  --bg:        #F6F7F9;
+  --panel:     #FFFFFF;
+  --panel-2:   #F0F2F5;
+  --line:      #DDE1E8;
+  --line-soft: #EAEDF2;
+  --text:      #1A1D23;
+  --muted:     #6B7280;
+  --accent:    #3B6FD4;
+  --blend:     multiply;
+  --fill-a:    0.34;
+  --today:     #D6455C;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ============================================================
+   КАРКАС
+   ============================================================ */
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+}
+.main {
+  display: grid;
+  grid-template-columns: 1fr 296px;
+  min-height: 0;
+}
+
+/* ---------- Тулбар ---------- */
+.toolbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 12px; height: 46px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+/* Нічого в шапці не стискається — інакше при вузькому вікні кнопки
+   схлопуються в нуль і накладаються одна на одну. Ужимається лише розпірка. */
+.toolbar > * { flex: none; }
+.brand { display: flex; align-items: baseline; gap: 8px; margin-right: 4px; }
+.brand b { font-size: 13px; font-weight: 600; letter-spacing: .2px; }
+.brand span { font-size: 11px; color: var(--muted); }
+.sep { width: 1px; height: 20px; background: var(--line); }
+.spacer { flex: 1 1 auto; min-width: 8px; }
+
+.btn {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.ghost { background: transparent; }
+.btn.danger:hover { border-color: var(--today); color: var(--today); }
+
+.seg {
+  display: inline-flex; padding: 2px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.seg button {
+  background: transparent; border: 0; cursor: pointer;
+  padding: 3px 10px; border-radius: 3px; color: var(--muted);
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: #0B0E13; font-weight: 500; }
+:root[data-theme="light"] .seg button[aria-pressed="true"] { color: #fff; }
+
+.zoom { display: flex; align-items: center; gap: 8px; }
+.zoom label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+.zoom input[type=range] { width: 130px; accent-color: var(--accent); }
+.zoom .lvl { color: var(--muted); font-size: 11px; min-width: 52px; }
+
+.goto-wrap { display: flex; align-items: center; gap: 7px; }
+.goto-wrap label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+.goto-wrap input {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 4px 7px; cursor: pointer;
+}
+.goto-wrap input:hover { border-color: var(--muted); }
+.goto-wrap input:focus-visible { outline: none; border-color: var(--accent); }
+
+/* ============================================================
+   ПОЛОТНО
+   ============================================================ */
+.scroll { overflow: auto; position: relative; min-width: 0; }
+.canvas { position: relative; min-width: 100%; }
+
+/* ---------- Лінійка ---------- */
+.ruler {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; height: var(--ruler-h);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.ruler-corner {
+  position: sticky; left: 0; z-index: 2;
+  flex: 0 0 var(--head-w); width: var(--head-w);
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  display: flex; align-items: flex-end; padding: 0 10px 5px;
+  font-size: 10.5px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .7px;
+}
+.ruler-lanes { position: relative; flex: 0 0 auto; }
+.tick-major, .tick-minor { position: absolute; top: 0; height: 100%; }
+.tick-major {
+  border-left: 1px solid var(--line);
+  padding: 5px 0 0 7px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .2px;
+  white-space: nowrap; overflow: hidden;
+}
+.tick-minor {
+  border-left: 1px solid var(--line-soft);
+  padding: 26px 0 0 5px;
+  font-size: 10.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden;
+}
+.tick-minor.weekend { background: rgba(127,140,170,.055); }
+
+/* ---------- Рядки ---------- */
+.rows { position: relative; }
+.grid {
+  position: absolute; top: 0; bottom: 0; left: var(--head-w);
+  pointer-events: none; z-index: 0;
+}
+.grid i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line-soft); }
+.grid i.major { background: var(--line); }
+.grid b {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: var(--today); opacity: .8;
+}
+.grid b::after {
+  content: "сьогодні";
+  position: absolute; top: 2px; left: 4px;
+  font-size: 9.5px; letter-spacing: .5px; color: var(--today);
+  text-transform: uppercase;
+}
+.grid u { position: absolute; top: 0; bottom: 0; background: rgba(127,140,170,.05); }
+
+.row { display: flex; border-bottom: 1px solid var(--line-soft); position: relative; }
+.row-head {
+  position: sticky; left: 0; z-index: 3;
+  flex: 0 0 var(--head-w); width: var(--head-w);
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 8px 0 0;
+}
+.row-head .swatch {
+  width: 4px; align-self: stretch; margin-right: 4px;
+  border: 0; padding: 0; cursor: pointer;
+  -webkit-appearance: none; appearance: none; background: transparent;
+}
+.row-head .swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.row-head .swatch::-webkit-color-swatch { border: 0; }
+.row-head .name {
+  flex: 1; min-width: 0; outline: none;
+  padding: 3px 4px; border-radius: 3px;
+  font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row-head .name:hover { background: var(--panel-2); }
+.row-head .name:focus { background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--accent); }
+.row-head .count { color: var(--muted); font-size: 10.5px; }
+.row-head .kill {
+  opacity: 0; border: 0; background: transparent; color: var(--muted);
+  cursor: pointer; padding: 2px 4px; border-radius: 3px;
+}
+.row:hover .kill { opacity: 1; }
+.row-head .kill:hover { color: var(--today); background: var(--panel-2); }
+
+.row-body {
+  position: relative; flex: 0 0 auto;
+  isolation: isolate;                 /* тримає blend всередині рядка */
+  cursor: crosshair;
+}
+
+/* ---------- Подія ---------- */
+.ev { position: absolute; border-radius: var(--radius); cursor: grab; }
+.ev.dragging { cursor: grabbing; }
+.ev-fill {
+  position: absolute; inset: 0; border-radius: inherit;
+  background: var(--c); opacity: var(--fill-a);
+  mix-blend-mode: var(--blend);
+  border: 1px solid var(--c);
+}
+.ev-label {
+  position: relative; z-index: 1;
+  padding: 5px 8px; height: 100%;
+  display: flex; flex-direction: column; justify-content: center;
+  overflow: hidden; pointer-events: none;
+}
+/* У режимі накладання підписи розводяться по вертикалі за тим самим підрівнем,
+   що й у стеку — прямокутники лишаються один поверх одного, а тексти вже ні. */
+.ev:not(.stacked) .ev-label { justify-content: flex-start; }
+.ev-label .t {
+  font-weight: 600; font-size: 12px; line-height: 15px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 1px 2px var(--bg);
+}
+.ev.stacked .ev-label { padding: 0 7px; }
+.ev[data-sel="1"] { box-shadow: 0 0 0 1.5px var(--accent), 0 4px 14px rgba(0,0,0,.35); z-index: 4; }
+.ev .h {
+  position: absolute; top: 0; bottom: 0; width: 7px; z-index: 2;
+  cursor: ew-resize;
+}
+.ev .h.l { left: -2px; } .ev .h.r { right: -2px; }
+.ev:hover .h::before {
+  content: ""; position: absolute; top: 20%; bottom: 20%; left: 3px;
+  width: 2px; border-radius: 2px; background: var(--c);
+}
+/* Не називати це `.ghost`: у шапці вже є кнопка-модифікатор `.btn.ghost`,
+   і глобальне правило з position:absolute викидало три кнопки в кут. */
+.drag-preview {
+  position: absolute; border-radius: var(--radius);
+  border: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  pointer-events: none; z-index: 6;
+}
+
+/* ---------- Порожній стан доріжок ---------- */
+.add-track {
+  display: flex; align-items: center;
+  padding: 6px 0 6px 12px;
+  position: sticky; left: 0; width: var(--head-w);
+}
+.add-track button {
+  background: transparent; border: 1px dashed var(--line);
+  color: var(--muted); border-radius: var(--radius);
+  padding: 4px 10px; cursor: pointer; width: 100%;
+}
+.add-track button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ============================================================
+   ІНСПЕКТОР
+   ============================================================ */
+.inspector {
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  padding: 14px;
+  overflow: auto;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.insp-title {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--muted); display: flex; align-items: center; gap: 8px;
+}
+.insp-title .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--muted)); }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field > label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.field input, .field select, .field textarea {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  width: 100%;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+.field textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* ---------- палітра кольорів ---------- */
+.swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.sw {
+  aspect-ratio: 1 / 1; border: 0; padding: 0; cursor: pointer;
+  border-radius: 4px; background: var(--c);
+  position: relative;
+}
+.sw::after {   /* збільшує зону влучання, не змінюючи вигляду */
+  content: ""; position: absolute; inset: -2px;
+}
+.sw:hover { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--c); }
+.sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--text); }
+.sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.color-row { display: flex; gap: 6px; margin-top: 7px; }
+.chip {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 5px 8px; cursor: pointer; font-size: 11.5px; color: var(--muted);
+  position: relative; overflow: hidden;
+}
+.chip:hover { border-color: var(--muted); color: var(--text); }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--text); }
+.chip .dot { width: 9px; height: 9px; border-radius: 2px; background: var(--c); flex: none; }
+.chip.custom input[type=color] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  width: 100%; height: 100%; border: 0; padding: 0;
+}
+.meta { font-size: 11px; color: var(--muted); }
+.empty { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.empty kbd {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 4px;
+  padding: 0 5px; font: inherit; font-size: 11px; color: var(--text);
+}
+
+/* ============================================================
+   ШУХЛЯДА ДАНИХ
+   ============================================================ */
+.drawer { background: var(--panel); border-top: 1px solid var(--line); }
+.drawer-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px; cursor: pointer; user-select: none;
+}
+.drawer-bar .chev { color: var(--muted); transition: transform .15s; }
+.drawer[data-open="1"] .chev { transform: rotate(90deg); }
+.drawer-body { display: none; border-top: 1px solid var(--line); }
+.drawer[data-open="1"] .drawer-body { display: block; }
+.drawer-body pre {
+  margin: 0; padding: 12px; max-height: 230px; overflow: auto;
+  font: 11.5px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace;
+  color: var(--muted); white-space: pre;
+}
+
+/* ---------- Статусбар ---------- */
+.status {
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 12px; height: 26px;
+  background: var(--panel); border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--muted);
+}
+.status kbd {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 3px; padding: 0 4px; font: inherit;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══════════ ТУЛБАР ═══════════ -->
+  <div class="toolbar">
+    <div class="brand"><b>Timeline</b><span>макет v0.1</span></div>
+    <div class="sep"></div>
+
+    <div class="zoom">
+      <label>Масштаб</label>
+      <input type="range" id="zoom" min="0" max="1000" value="640">
+      <span class="lvl" id="zoomLvl">місяці</span>
+    </div>
+    <div class="sep"></div>
+
+    <div class="seg" id="modeSeg">
+      <button data-mode="overlay" aria-pressed="true">Прозоро</button>
+      <button data-mode="stack"   aria-pressed="false">Стек</button>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="goto-wrap">
+      <label for="goto">Перейти до</label>
+      <input type="date" id="goto" title="Будь-яка дата — шкала розсунеться до неї">
+    </div>
+    <button class="btn ghost" id="btnToday">Сьогодні</button>
+    <button class="btn ghost" id="btnTheme">Тема</button>
+    <div class="sep"></div>
+    <button class="btn" id="btnImport">Імпорт…</button>
+    <button class="btn" id="btnExport">Експорт JSON</button>
+    <button class="btn ghost" id="btnReset">Демо</button>
+  </div>
+
+  <!-- ═══════════ ГОЛОВНА ═══════════ -->
+  <div class="main">
+    <div class="scroll" id="scroll">
+      <div class="canvas" id="canvas">
+        <div class="ruler">
+          <div class="ruler-corner">Доріжки</div>
+          <div class="ruler-lanes" id="rulerLanes"></div>
+        </div>
+        <div class="rows" id="rows"></div>
+        <div class="add-track"><button id="btnAddTrack">+ доріжка</button></div>
+      </div>
+    </div>
+
+    <aside class="inspector" id="inspector"></aside>
+  </div>
+
+  <!-- ═══════════ ДАНІ ═══════════ -->
+  <div class="drawer" id="drawer" data-open="0">
+    <div class="drawer-bar" id="drawerBar">
+      <span class="chev">▸</span>
+      <span>Файл даних</span>
+      <div class="seg" id="fmtSeg" style="margin-left:6px">
+        <button data-fmt="json" aria-pressed="true">JSON</button>
+        <button data-fmt="csv"  aria-pressed="false">CSV</button>
+      </div>
+      <span class="spacer"></span>
+      <span class="meta" id="drawerMeta"></span>
+    </div>
+    <div class="drawer-body"><pre id="dataOut"></pre></div>
+  </div>
+
+  <div class="status">
+    <span id="stat"></span>
+    <span class="spacer" style="flex:1"></span>
+    <span><kbd>протягнути</kbd> нова подія</span>
+    <span><kbd>2×клік</kbd> швидка подія</span>
+    <span><kbd>Ctrl</kbd>+колесо або <kbd>+</kbd>/<kbd>−</kbd> масштаб</span>
+    <span><kbd>Del</kbd> видалити</span>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   1. ДАТИ — усе всередині рахуємо цілими «днями від епохи» (UTC).
+   ============================================================================ */
+const DAY = 86400000;
+const toDay  = iso => Math.floor(Date.parse(iso + "T00:00:00Z") / DAY);
+const toDate = d   => new Date(d * DAY);
+const toISO  = d   => toDate(d).toISOString().slice(0, 10);
+const TODAY  = Math.floor(Date.now() / DAY);
+
+const M_FULL  = ["січень","лютий","березень","квітень","травень","червень",
+                 "липень","серпень","вересень","жовтень","листопад","грудень"];
+const M_SHORT = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"];
+
+function fmtHuman(d) {
+  const t = toDate(d);
+  return `${t.getUTCDate()} ${M_SHORT[t.getUTCMonth()]} ${t.getUTCFullYear()}`;
+}
+function fmtSpan(a, b) {
+  const n = b - a + 1;
+  const w = n % 10 === 1 && n % 100 !== 11 ? "день"
+          : [2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100) ? "дні" : "днів";
+  return `${fmtHuman(a)} → ${fmtHuman(b)} · ${n} ${w}`;
+}
+
+/* ============================================================================
+   2. МОДЕЛЬ — саме це і лягає у файл на диску.
+   ============================================================================ */
+/* Заготовлені кольори. Однакові світлота й насиченість у всіх — щоб жоден не
+   «кричав» гучніше за сусідів і щоб напівпрозорий фон читався в обох темах. */
+const PALETTE = [
+  { hex:"#5B8DEF", name:"синій"      }, { hex:"#4EA8DE", name:"блакитний"  },
+  { hex:"#43BFA3", name:"бірюзовий"  }, { hex:"#62B96A", name:"зелений"    },
+  { hex:"#9DC65A", name:"лаймовий"   }, { hex:"#E0A458", name:"бурштин"    },
+  { hex:"#E08A4F", name:"помаранч"   }, { hex:"#E0687A", name:"кораловий"  },
+  { hex:"#D45D9E", name:"мажента"    }, { hex:"#A78BFA", name:"фіолетовий" },
+  { hex:"#7C86C4", name:"лавандовий" }, { hex:"#98A2B3", name:"сірий"      },
+];
+const TRACK_DEFAULTS = [0, 2, 5, 7, 9].map(i => PALETTE[i].hex);
+
+/* Подія без власного кольору бере колір доріжки. Це НАЗВАНИЙ стан, а не
+   відсутнє поле: інакше «успадковує» і «поле загубилось при імпорті»
+   виглядають у файлі однаково. */
+const COLOR_INHERIT = "inherit";
+const colorOf = (event, track) => event.color === COLOR_INHERIT ? track.color : event.color;
+
+function demo() {
+  const y = new Date().getUTCFullYear();
+  const D = (m, d) => `${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  return {
+    version: 1,
+    tracks: [
+      { id:"t1", name:"Дослідження", color:TRACK_DEFAULTS[0] },
+      { id:"t2", name:"Розробка",    color:TRACK_DEFAULTS[1] },
+      { id:"t3", name:"Контент",     color:TRACK_DEFAULTS[2] },
+      { id:"t4", name:"Публічне",    color:TRACK_DEFAULTS[3] },
+      { id:"t5", name:"Особисте",    color:TRACK_DEFAULTS[4] },
+    ],
+    events: [
+      { id:"e1", trackId:"t1", start:D(1,8),  end:D(3,20), color:COLOR_INHERIT, title:"Огляд джерел",     note:"Архівні збірки, 4 фонди. Перший прохід — суцільний, другий — вибірковий." },
+      { id:"e2", trackId:"t1", start:D(2,15), end:D(5,2),  color:"#D45D9E",     title:"Інтерв'ю",          note:"Власний колір — щоб відрізнявся від огляду, з яким перетинається." },
+      { id:"e3", trackId:"t2", start:D(3,1),  end:D(7,15), color:COLOR_INHERIT, title:"Прототип",          note:"" },
+      { id:"e4", trackId:"t2", start:D(6,10), end:D(9,30), color:"#9DC65A",     title:"Стабілізація",      note:"Паралельно з прототипом — рефакторинг ядра." },
+      { id:"e5", trackId:"t3", start:D(4,5),  end:D(6,1),  color:COLOR_INHERIT, title:"Чернетка розділів", note:"" },
+      { id:"e6", trackId:"t3", start:D(5,20), end:D(8,12), color:"#E08A4F",     title:"Редактура",         note:"" },
+      { id:"e7", trackId:"t4", start:D(9,1),  end:D(9,14), color:COLOR_INHERIT, title:"Доповідь",          note:"Конференція, 14-та." },
+      { id:"e8", trackId:"t4", start:D(11,3), end:D(11,8), color:"#A78BFA",     title:"Публікація",        note:"" },
+      { id:"e9", trackId:"t5", start:D(7,20), end:D(8,17), color:COLOR_INHERIT, title:"Відпустка",         note:"Жодних комітів." },
+      { id:"e10",trackId:"t5", start:D(2,1),  end:D(12,20),color:"#98A2B3",     title:"Фоновий курс",      note:"Сірий навмисне: тягнеться весь рік і має лежати тлом під усім іншим." },
+    ],
+  };
+}
+
+const KEY = "timeline-mockup-v1";
+let doc = load();
+function load() {
+  try { const s = localStorage.getItem(KEY); if (s) return normalize(JSON.parse(s)); } catch {}
+  return demo();
+}
+/* Імпортований чи старий файл може не мати `color` — доводимо до повної форми
+   на вході, щоб решта коду ніколи не зустріла напівзаповнену подію. */
+function normalize(d) {
+  for (const e of d.events) if (typeof e.color !== "string") e.color = COLOR_INHERIT;
+  return d;
+}
+const save = () => localStorage.setItem(KEY, JSON.stringify(doc));
+const uid  = p => p + Math.random().toString(36).slice(2, 8);
+
+/* ============================================================================
+   3. СТАН ВІДОБРАЖЕННЯ (у файл не потрапляє)
+   ============================================================================ */
+const view = {
+  pxPerDay: 1.4,
+  mode: "overlay",      // overlay | stack
+  selected: null,
+  fmt: "json",
+};
+
+/* Масштабна шкала — логарифмічна: 0.05 … 42 px/день */
+const PPD_MIN = 0.05, PPD_MAX = 42;
+/* Один «клац» колеса (deltaY ≈ 100) множить масштаб приблизно на 1.5 —
+   від країв шкали до країв виходить ~23 клацання, тобто зум різкий і
+   весь діапазон обходиться за кілька рухів. */
+const ZOOM_WHEEL_BASE = 1.004;
+const ZOOM_STEP = 1.6;   // для кнопок/клавіш
+const sliderToPpd = v => PPD_MIN * Math.pow(PPD_MAX / PPD_MIN, v / 1000);
+const ppdToSlider = p => Math.round(1000 * Math.log(p / PPD_MIN) / Math.log(PPD_MAX / PPD_MIN));
+
+function level() {
+  const p = view.pxPerDay;
+  if (p >= 14)  return "day";
+  if (p >= 3.2) return "week";
+  if (p >= 0.7) return "month";
+  if (p >= 0.2) return "quarter";
+  return "year";
+}
+const LEVEL_NAME = { day:"дні", week:"тижні", month:"місяці", quarter:"квартали", year:"роки" };
+
+/* Домен — це просто ділянка часу, яку ЗАРАЗ можна прокрутити. Він не обмежує
+   даних: доїхавши до краю, ви його розсовуєте (див. autoExtend) і потрапляєте
+   у 1850-й так само легко, як у наступний місяць. Тому він тільки РОСТЕ —
+   стискається лише коли набір даних замінюють цілком. */
+let domain = { a: 0, b: 0 };
+
+function resetDomain() {
+  let a = TODAY - 120, b = TODAY + 120;
+  for (const e of doc.events) { a = Math.min(a, toDay(e.start)); b = Math.max(b, toDay(e.end)); }
+  const pad = Math.max(45, Math.round((b - a) * 0.08));
+  domain = { a: a - pad, b: b + pad };
+  if (domain.b - domain.a < 540) { const c = (domain.a + domain.b) >> 1; domain = { a: c - 270, b: c + 270 }; }
+}
+/* Гарантує, що діапазон видно, і повертає наскільки зсунувся лівий край —
+   викликач компенсує це прокруткою, інакше картинка стрибне. */
+function growDomain(a, b) {
+  const before = domain.a;
+  domain = { a: Math.min(domain.a, a), b: Math.max(domain.b, b) };
+  return before - domain.a;
+}
+function coverData() {
+  for (const e of doc.events) growDomain(toDay(e.start), toDay(e.end));
+}
+const x    = d  => (d - domain.a) * view.pxPerDay;
+const unx  = px => domain.a + px / view.pxPerDay;
+const totalW = () => Math.max(600, (domain.b - domain.a) * view.pxPerDay);
+
+/* ============================================================================
+   4. ЛІНІЙКА
+   ============================================================================ */
+/* Поділки будуються ТІЛЬКИ для видимого вікна. Домен може тягтися на століття,
+   а день-за-днем це десятки тисяч вузлів — рахувати їх усі, щоб показати екран,
+   і є та причина, через яку такі шкали зазвичай упираються в «поточний рік». */
+function visibleWindow() {
+  const margin = scrollEl.clientWidth;
+  return {
+    from: Math.max(domain.a, Math.floor(unx(scrollEl.scrollLeft - 168 - margin))),
+    to:   Math.min(domain.b, Math.ceil (unx(scrollEl.scrollLeft - 168 + scrollEl.clientWidth + margin))),
+  };
+}
+
+function periods(kind, from, to) {
+  const out = [];
+  const d = toDate(from);
+  if (kind === "week")    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  if (kind === "month")   d.setUTCDate(1);
+  if (kind === "quarter") { d.setUTCDate(1); d.setUTCMonth(Math.floor(d.getUTCMonth() / 3) * 3); }
+  if (kind === "year")    { d.setUTCDate(1); d.setUTCMonth(0); }
+  if (kind === "decade")  { d.setUTCDate(1); d.setUTCMonth(0); d.setUTCFullYear(Math.floor(d.getUTCFullYear() / 10) * 10); }
+
+  let guard = 0;
+  while (guard++ < 6000) {
+    const s = Math.floor(d.getTime() / DAY);
+    const n = new Date(d);
+    if      (kind === "day")     n.setUTCDate(n.getUTCDate() + 1);
+    else if (kind === "week")    n.setUTCDate(n.getUTCDate() + 7);
+    else if (kind === "month")   n.setUTCMonth(n.getUTCMonth() + 1);
+    else if (kind === "quarter") n.setUTCMonth(n.getUTCMonth() + 3);
+    else if (kind === "year")    n.setUTCFullYear(n.getUTCFullYear() + 1);
+    else                         n.setUTCFullYear(n.getUTCFullYear() + 10);
+    out.push({ s, e: Math.floor(n.getTime() / DAY), date: new Date(d) });
+    if (s > to) break;
+    d.setTime(n.getTime());
+  }
+  return out;
+}
+
+const TIERS = {
+  day:     { minor:"day",     major:"month",
+             mlab:t => t.date.getUTCDate(),
+             Mlab:t => `${M_FULL[t.date.getUTCMonth()]} ${t.date.getUTCFullYear()}` },
+  week:    { minor:"week",    major:"month",
+             mlab:t => `${t.date.getUTCDate()} ${M_SHORT[t.date.getUTCMonth()]}`,
+             Mlab:t => `${M_FULL[t.date.getUTCMonth()]} ${t.date.getUTCFullYear()}` },
+  month:   { minor:"month",   major:"year",
+             mlab:t => M_SHORT[t.date.getUTCMonth()],
+             Mlab:t => t.date.getUTCFullYear() },
+  quarter: { minor:"quarter", major:"year",
+             mlab:t => "Q" + (Math.floor(t.date.getUTCMonth() / 3) + 1),
+             Mlab:t => t.date.getUTCFullYear() },
+  year:    { minor:"year",    major:"decade",
+             mlab:t => "’" + String(t.date.getUTCFullYear()).slice(2),
+             Mlab:t => t.date.getUTCFullYear() + "-ті" },
+};
+
+function renderRuler() {
+  const tier = TIERS[level()];
+  const { from, to } = visibleWindow();
+  const majors = periods(tier.major, from, to);
+  const minors = periods(tier.minor, from, to);
+  const lanes = document.getElementById("rulerLanes");
+  lanes.style.width = totalW() + "px";
+
+  let html = "";
+  for (const t of majors) {
+    html += `<div class="tick-major" style="left:${x(t.s)}px;width:${(t.e - t.s) * view.pxPerDay}px">${tier.Mlab(t)}</div>`;
+  }
+  for (const t of minors) {
+    const w = (t.e - t.s) * view.pxPerDay;
+    if (w < 22) continue;
+    const wk = tier.minor === "day" && [0, 6].includes(t.date.getUTCDay()) ? " weekend" : "";
+    html += `<div class="tick-minor${wk}" style="left:${x(t.s)}px;width:${w}px">${tier.mlab(t)}</div>`;
+  }
+  lanes.innerHTML = html;
+
+  // сітка під рядками
+  let g = `<b style="left:${x(TODAY)}px"></b>`;
+  for (const t of majors) g += `<i class="major" style="left:${x(t.s)}px"></i>`;
+  for (const t of minors) {
+    const w = (t.e - t.s) * view.pxPerDay;
+    if (w < 14) continue;
+    g += `<i style="left:${x(t.s)}px"></i>`;
+    if (tier.minor === "day" && [0, 6].includes(t.date.getUTCDay()))
+      g += `<u style="left:${x(t.s)}px;width:${w}px"></u>`;
+  }
+  gridEl.style.width = totalW() + "px";
+  gridEl.innerHTML = g;
+}
+
+/* ============================================================================
+   5. РОЗКЛАДКА ПОДІЙ
+   ============================================================================ */
+/* Стек: жадібне присвоєння підрівня — перша доріжка, де подія не перетинається. */
+function assignLanes(evs) {
+  const sorted = [...evs].sort((a, b) => toDay(a.start) - toDay(b.start));
+  const ends = [];
+  const lane = new Map();
+  for (const e of sorted) {
+    const s = toDay(e.start), en = toDay(e.end);
+    let i = 0;
+    while (i < ends.length && ends[i] >= s) i++;
+    ends[i] = en;
+    lane.set(e.id, i);
+  }
+  return { lane, count: Math.max(1, ends.length) };
+}
+
+const rowsEl = document.getElementById("rows");
+const gridEl = document.createElement("div");
+gridEl.className = "grid";
+
+function renderRows() {
+  const W = totalW();
+  rowsEl.innerHTML = "";
+  rowsEl.appendChild(gridEl);
+
+  for (const tr of doc.tracks) {
+    const evs = doc.events.filter(e => e.trackId === tr.id);
+    const { lane, count } = assignLanes(evs);
+    const stacked = view.mode === "stack";
+    const laneH = 24, gap = 3, padY = 7;
+    const h = stacked
+      ? Math.max(52, padY * 2 + count * laneH + (count - 1) * gap)
+      : 66;
+
+    const row = document.createElement("div");
+    row.className = "row";
+    row.dataset.track = tr.id;
+    row.style.height = h + "px";
+
+    row.innerHTML = `
+      <div class="row-head">
+        <input class="swatch" type="color" value="${tr.color}" title="Колір доріжки">
+        <div class="name" contenteditable="plaintext-only" spellcheck="false">${escapeHtml(tr.name)}</div>
+        <span class="count">${evs.length}</span>
+        <button class="kill" title="Видалити доріжку">×</button>
+      </div>
+      <div class="row-body" style="width:${W}px"></div>`;
+
+    const body = row.querySelector(".row-body");
+    for (const e of evs) {
+      const s = toDay(e.start), en = toDay(e.end);
+      const left = x(s);
+      const w = Math.max(4, (en - s + 1) * view.pxPerDay);
+      const el = document.createElement("div");
+      el.className = "ev" + (stacked ? " stacked" : "");
+      el.dataset.id = e.id;
+      if (view.selected === e.id) el.dataset.sel = "1";
+      el.style.setProperty("--c", colorOf(e, tr));
+      el.style.left = left + "px";
+      el.style.width = w + "px";
+      el.style.top    = stacked ? (padY + lane.get(e.id) * (laneH + gap)) + "px" : "8px";
+      el.style.height = stacked ? laneH + "px" : (h - 16) + "px";
+      el.title = `${e.title}\n${fmtSpan(s, en)}${e.note ? "\n\n" + e.note : ""}`;
+      const labelTop = stacked ? 0 : lane.get(e.id) * 16;
+      el.innerHTML = `
+        <div class="ev-fill"></div>
+        <div class="ev-label" style="padding-top:${5 + labelTop}px">
+          <div class="t">${escapeHtml(e.title || "без назви")}</div></div>
+        <div class="h l"></div><div class="h r"></div>`;
+      body.appendChild(el);
+    }
+
+    /* --- події доріжки --- */
+    row.querySelector(".swatch").addEventListener("input", ev => {
+      tr.color = ev.target.value; commit();
+    });
+    const nameEl = row.querySelector(".name");
+    nameEl.addEventListener("blur", () => { tr.name = nameEl.textContent.trim() || "доріжка"; commit(); });
+    nameEl.addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); nameEl.blur(); } });
+    row.querySelector(".kill").addEventListener("click", () => {
+      if (doc.tracks.length <= 1) return;
+      if (!confirm(`Видалити доріжку «${tr.name}» разом із ${evs.length} подіями?`)) return;
+      doc.tracks = doc.tracks.filter(t => t.id !== tr.id);
+      doc.events = doc.events.filter(e => e.trackId !== tr.id);
+      view.selected = null;
+      commit();
+    });
+
+    rowsEl.appendChild(row);
+  }
+  document.getElementById("canvas").style.width = (168 + W) + "px";
+}
+
+const escapeHtml = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+/* ============================================================================
+   6. ІНСПЕКТОР
+   ============================================================================ */
+function renderInspector() {
+  const box = document.getElementById("inspector");
+  const e = doc.events.find(v => v.id === view.selected);
+
+  if (!e) {
+    box.innerHTML = `
+      <div class="insp-title">Нічого не обрано</div>
+      <div class="empty">
+        <p>П’ять доріжок, на кожній — скільки завгодно подій. Події <b>можуть перетинатися в часі</b>
+        на одній доріжці; саме цього немає в діаграмі Ганта.</p>
+        <p><kbd>протягнути</kbd> по доріжці — створити подію<br>
+           <kbd>2× клік</kbd> — швидка подія<br>
+           <kbd>тягнути край</kbd> — змінити дати<br>
+           <kbd>тягнути тіло</kbd> — зсунути, зокрема на іншу доріжку<br>
+           <kbd>Ctrl</kbd>+колесо або <kbd>+</kbd>/<kbd>−</kbd> — масштаб<br>
+           <kbd>Del</kbd> — видалити</p>
+        <p>Час не обмежений поточним роком: прокрутіть до краю — шкала розсунеться
+        сама, або задайте будь-яку дату полем <b>Перейти до</b> у шапці.</p>
+        <p>Назву й колір доріжки можна редагувати прямо в підпису зліва; окрема
+        подія може мати власний колір.</p>
+      </div>`;
+    return;
+  }
+  const tr = doc.tracks.find(t => t.id === e.trackId);
+  const own = e.color !== COLOR_INHERIT;
+  const shown = colorOf(e, tr);
+
+  box.innerHTML = `
+    <div class="insp-title" style="--c:${shown}"><span class="dot"></span>Подія</div>
+    <div class="field"><label>Назва</label><input id="fTitle" value="${escapeHtml(e.title)}"></div>
+    <div class="field"><label>Доріжка</label>
+      <select id="fTrack">${doc.tracks.map(t =>
+        `<option value="${t.id}"${t.id === e.trackId ? " selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
+      </select></div>
+    <div class="two">
+      <div class="field"><label>Початок</label><input type="date" id="fStart" value="${e.start}"></div>
+      <div class="field"><label>Кінець</label><input type="date" id="fEnd" value="${e.end}"></div>
+    </div>
+    <div class="meta">${fmtSpan(toDay(e.start), toDay(e.end))}</div>
+
+    <div class="field"><label>Колір</label>
+      <div class="swatches" id="fSwatches">
+        ${PALETTE.map(p => `<button class="sw" data-hex="${p.hex}" title="${p.name}"
+             style="--c:${p.hex}" aria-pressed="${own && e.color.toLowerCase() === p.hex.toLowerCase()}"></button>`).join("")}
+      </div>
+      <div class="color-row">
+        <button class="chip" id="fInherit" aria-pressed="${!own}">
+          <span class="dot" style="--c:${tr.color}"></span>як у доріжки
+        </button>
+        <label class="chip custom" aria-pressed="${own && !PALETTE.some(p => p.hex.toLowerCase() === e.color.toLowerCase())}">
+          <span class="dot" style="--c:${shown}"></span>свій…
+          <input type="color" id="fColor" value="${shown}">
+        </label>
+      </div>
+    </div>
+
+    <div class="field"><label>Примітка</label><textarea id="fNote">${escapeHtml(e.note || "")}</textarea></div>
+    <div style="flex:1"></div>
+    <div class="meta">id: ${e.id}</div>
+    <button class="btn danger" id="fDel">Видалити подію</button>`;
+
+  box.querySelector("#fSwatches").addEventListener("click", ev => {
+    const sw = ev.target.closest(".sw"); if (!sw) return;
+    e.color = sw.dataset.hex; commit();
+  });
+  box.querySelector("#fInherit").addEventListener("click", () => { e.color = COLOR_INHERIT; commit(); });
+  box.querySelector("#fColor").addEventListener("input", ev => {
+    e.color = ev.target.value;
+    // повний перерендер закрив би нативну піпетку на кожен рух — оновлюємо лише полотно
+    commit({ light: true });
+  });
+  box.querySelector("#fColor").addEventListener("change", () => commit());
+
+  const bind = (id, fn, ev = "input") => box.querySelector(id).addEventListener(ev, fn);
+  bind("#fTitle", ev => { e.title = ev.target.value; commit({ keepFocus: "#fTitle" }); });
+  bind("#fNote",  ev => { e.note  = ev.target.value; commit({ keepFocus: "#fNote", light: true }); });
+  bind("#fTrack", ev => { e.trackId = ev.target.value; commit(); }, "change");
+  bind("#fStart", ev => { if (ev.target.value) { e.start = ev.target.value; if (toDay(e.end) < toDay(e.start)) e.end = e.start; commit(); } }, "change");
+  bind("#fEnd",   ev => { if (ev.target.value) { e.end = ev.target.value; if (toDay(e.end) < toDay(e.start)) e.start = e.end; commit(); } }, "change");
+  bind("#fDel",   () => { doc.events = doc.events.filter(v => v.id !== e.id); view.selected = null; commit(); }, "click");
+}
+
+/* ============================================================================
+   7. ВЗАЄМОДІЯ З ПОЛОТНОМ
+   ============================================================================ */
+let drag = null;
+
+rowsEl.addEventListener("pointerdown", ev => {
+  const row = ev.target.closest(".row");
+  if (!row || ev.target.closest(".row-head")) return;
+  const body = row.querySelector(".row-body");
+  const rect = body.getBoundingClientRect();
+  const evEl = ev.target.closest(".ev");
+
+  if (evEl) {
+    const item = doc.events.find(v => v.id === evEl.dataset.id);
+    view.selected = item.id;
+    const handle = ev.target.closest(".h");
+    drag = {
+      kind: handle ? (handle.classList.contains("l") ? "resize-l" : "resize-r") : "move",
+      id: item.id, x0: ev.clientX,
+      s0: toDay(item.start), e0: toDay(item.end), moved: false,
+    };
+    evEl.classList.add("dragging");
+  } else {
+    const d0 = Math.round(unx(ev.clientX - rect.left));
+    drag = { kind: "create", trackId: row.dataset.track, anchor: d0, cur: d0, body, moved: false };
+    const g = document.createElement("div");
+    g.className = "drag-preview";
+    g.style.top = "8px"; g.style.bottom = "8px";
+    body.appendChild(g);
+    drag.preview = g;
+    view.selected = null;
+  }
+  rowsEl.setPointerCapture(ev.pointerId);
+  render({ light: true });
+});
+
+rowsEl.addEventListener("pointermove", ev => {
+  if (!drag) return;
+  if (drag.kind === "create") {
+    const rect = drag.body.getBoundingClientRect();
+    drag.cur = Math.round(unx(ev.clientX - rect.left));
+    const a = Math.min(drag.anchor, drag.cur), b = Math.max(drag.anchor, drag.cur);
+    drag.preview.style.left = x(a) + "px";
+    drag.preview.style.width = Math.max(2, (b - a + 1) * view.pxPerDay) + "px";
+    if (Math.abs(drag.cur - drag.anchor) > 0) drag.moved = true;
+    return;
+  }
+  const dd = Math.round((ev.clientX - drag.x0) / view.pxPerDay);
+  const item = doc.events.find(v => v.id === drag.id);
+  if (!item) return;
+  if (dd !== 0) drag.moved = true;
+
+  if (drag.kind === "move") {
+    item.start = toISO(drag.s0 + dd);
+    item.end   = toISO(drag.e0 + dd);
+    // перетягування на іншу доріжку
+    const under = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".row");
+    if (under && under.dataset.track && under.dataset.track !== item.trackId) {
+      item.trackId = under.dataset.track;
+      drag.moved = true;
+    }
+  } else if (drag.kind === "resize-l") {
+    item.start = toISO(Math.min(drag.s0 + dd, drag.e0));
+  } else {
+    item.end = toISO(Math.max(drag.e0 + dd, drag.s0));
+  }
+  render({ light: true });
+});
+
+rowsEl.addEventListener("pointerup", ev => {
+  if (!drag) return;
+  const d = drag; drag = null;
+
+  if (d.kind === "create") {
+    d.preview.remove();
+    if (d.moved) {
+      const a = Math.min(d.anchor, d.cur), b = Math.max(d.anchor, d.cur);
+      addEvent(d.trackId, a, b);
+    }
+  }
+  commit();
+});
+
+rowsEl.addEventListener("dblclick", ev => {
+  const row = ev.target.closest(".row");
+  if (!row || ev.target.closest(".row-head") || ev.target.closest(".ev")) return;
+  const rect = row.querySelector(".row-body").getBoundingClientRect();
+  const a = Math.round(unx(ev.clientX - rect.left));
+  const span = Math.max(1, Math.round(90 / view.pxPerDay));   // ≈90 px завширшки
+  addEvent(row.dataset.track, a, a + span - 1);
+  commit();
+  setTimeout(() => document.getElementById("fTitle")?.select(), 0);
+});
+
+function addEvent(trackId, a, b) {
+  const e = { id: uid("e"), trackId, start: toISO(a), end: toISO(b),
+              color: COLOR_INHERIT, title: "Нова подія", note: "" };
+  doc.events.push(e);
+  view.selected = e.id;
+}
+
+document.addEventListener("keydown", ev => {
+  const typing = /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName) || ev.target.isContentEditable;
+  if (ev.key === "Escape") { view.selected = null; render(); return; }
+  if (!typing && (ev.code === "Equal" || ev.code === "NumpadAdd"))      { zoomAtCenter(ZOOM_STEP);     return; }
+  if (!typing && (ev.code === "Minus" || ev.code === "NumpadSubtract")) { zoomAtCenter(1 / ZOOM_STEP); return; }
+  if ((ev.key === "Delete" || ev.key === "Backspace") && view.selected && !typing) {
+    doc.events = doc.events.filter(v => v.id !== view.selected);
+    view.selected = null; commit();
+  }
+});
+
+/* ---------- масштаб ---------- */
+const scrollEl = document.getElementById("scroll");
+scrollEl.addEventListener("wheel", ev => {
+  if (!ev.ctrlKey) return;
+  ev.preventDefault();
+  const rect = scrollEl.getBoundingClientRect();
+  const px = scrollEl.scrollLeft + (ev.clientX - rect.left) - 168;
+  const anchorDay = unx(px);
+  // deltaMode 1 = «рядки» (Firefox), ~3 замість ~100 пікселів — інакше там зум ледь ворушиться
+  const delta = ev.deltaY * (ev.deltaMode === 1 ? 33 : 1);
+  setZoom(view.pxPerDay * Math.pow(ZOOM_WHEEL_BASE, -delta), anchorDay, ev.clientX - rect.left - 168);
+}, { passive: false });
+
+function setZoom(ppd, anchorDay = null, screenX = null) {
+  view.pxPerDay = Math.min(PPD_MAX, Math.max(PPD_MIN, ppd));
+  document.getElementById("zoom").value = ppdToSlider(view.pxPerDay);
+  document.getElementById("zoomLvl").textContent = LEVEL_NAME[level()];
+  render();
+  if (anchorDay !== null) scrollEl.scrollLeft = x(anchorDay) - screenX;
+}
+
+/* Зум, прив'язаний до центру видимої області — спільний для слайдера й клавіш,
+   щоб точка, на яку дивиться користувач, не тікала. */
+function zoomAtCenter(factorOrPpd, absolute = false) {
+  const rect = scrollEl.getBoundingClientRect();
+  const screenX = rect.width / 2 - 168;
+  const centerDay = unx(scrollEl.scrollLeft + screenX);
+  setZoom(absolute ? factorOrPpd : view.pxPerDay * factorOrPpd, centerDay, screenX);
+}
+document.getElementById("zoom").addEventListener("input", ev => {
+  zoomAtCenter(sliderToPpd(+ev.target.value), true);
+});
+
+/* Прокрутка до краю розсовує домен ще на екран — так час нескінченний в обидва
+   боки, і при цьому нічого не треба віртуалізувати, крім поділок. */
+const EDGE_PX = 240;
+function autoExtend() {
+  const chunk = Math.max(90, Math.round(scrollEl.clientWidth / view.pxPerDay));
+  if (scrollEl.scrollLeft < EDGE_PX) {
+    const shift = growDomain(domain.a - chunk, domain.b);
+    renderAll();
+    scrollEl.scrollLeft += shift * view.pxPerDay;
+  } else if (scrollEl.scrollWidth - scrollEl.scrollLeft - scrollEl.clientWidth < EDGE_PX) {
+    growDomain(domain.a, domain.b + chunk);
+    renderAll();
+  }
+}
+
+let scrollPending = false;
+scrollEl.addEventListener("scroll", () => {
+  if (scrollPending) return;
+  scrollPending = true;
+  requestAnimationFrame(() => { scrollPending = false; autoExtend(); renderRuler(); });
+});
+
+function goToDay(day, keepZoom = true) {
+  const half = Math.round(scrollEl.clientWidth / view.pxPerDay / 2) + 30;
+  const shift = growDomain(day - half, day + half);
+  renderAll();
+  scrollEl.scrollLeft = x(day) - scrollEl.clientWidth / 2;
+  if (shift) renderRuler();
+}
+
+document.getElementById("btnToday").addEventListener("click", () => goToDay(TODAY));
+document.getElementById("goto").addEventListener("change", ev => {
+  if (ev.target.value) goToDay(toDay(ev.target.value));
+});
+
+/* ---------- перемикачі ---------- */
+document.getElementById("modeSeg").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  view.mode = b.dataset.mode;
+  [...ev.currentTarget.children].forEach(c => c.setAttribute("aria-pressed", String(c === b)));
+  render();
+});
+document.getElementById("fmtSeg").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  ev.stopPropagation();
+  view.fmt = b.dataset.fmt;
+  [...ev.currentTarget.children].forEach(c => c.setAttribute("aria-pressed", String(c === b)));
+  renderData();
+});
+document.getElementById("btnTheme").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  document.documentElement.dataset.theme = cur;
+});
+document.getElementById("drawerBar").addEventListener("click", () => {
+  const d = document.getElementById("drawer");
+  d.dataset.open = d.dataset.open === "1" ? "0" : "1";
+});
+document.getElementById("btnAddTrack").addEventListener("click", () => {
+  doc.tracks.push({ id: uid("t"), name: "Нова доріжка",
+                    color: PALETTE[(doc.tracks.length * 2) % PALETTE.length].hex });
+  commit();
+});
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (!confirm("Замінити поточні дані демо-набором?")) return;
+  doc = demo(); view.selected = null; resetDomain(); commit(); goToDay(TODAY);
+});
+document.getElementById("btnExport").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "timeline.json";
+  a.click();
+});
+document.getElementById("btnImport").addEventListener("click", () => {
+  const i = document.createElement("input");
+  i.type = "file"; i.accept = ".json";
+  i.onchange = () => {
+    const f = i.files[0]; if (!f) return;
+    f.text().then(t => {
+      doc = normalize(JSON.parse(t));
+      view.selected = null; resetDomain(); commit();
+      goToDay(doc.events.length ? Math.min(...doc.events.map(e => toDay(e.start))) : TODAY);
+    });
+  };
+  i.click();
+});
+
+/* ============================================================================
+   8. ФАЙЛ ДАНИХ (те, що ляже на диск)
+   ============================================================================ */
+function toCsv() {
+  const q = v => /[",\n]/.test(v ?? "") ? `"${String(v).replace(/"/g, '""')}"` : (v ?? "");
+  const trackOf = id => doc.tracks.find(t => t.id === id);
+  const lines = ["id,track,start,end,color,title,note"];
+  for (const e of doc.events) {
+    const tr = trackOf(e.trackId);
+    lines.push([e.id, tr?.name ?? "", e.start, e.end, e.color, e.title, e.note].map(q).join(","));
+  }
+  return lines.join("\n");
+}
+function renderData() {
+  document.getElementById("dataOut").textContent =
+    view.fmt === "json" ? JSON.stringify(doc, null, 2) : toCsv();
+  document.getElementById("drawerMeta").textContent =
+    view.fmt === "json" ? "timeline.json" : "timeline.csv (примітки з переносами рядків беруться в лапки)";
+}
+
+/* ============================================================================
+   9. ЦИКЛ РЕНДЕРУ
+   ============================================================================ */
+function renderAll() { renderRuler(); renderRows(); }
+
+function render(opts = {}) {
+  if (!opts.light) coverData();
+  renderRuler();
+  renderRows();
+  if (!opts.light) { renderInspector(); if (opts.keepFocus) restore(opts.keepFocus); }
+  document.getElementById("stat").textContent =
+    `${doc.tracks.length} доріжок · ${doc.events.length} подій · масштаб ${view.pxPerDay.toFixed(2)} px/день (${LEVEL_NAME[level()]})`;
+  renderData();
+}
+function restore(sel) {
+  const el = document.querySelector(sel);
+  if (el) { const p = el.selectionStart; el.focus(); if (p != null) el.setSelectionRange(p, p); }
+}
+function commit(opts = {}) {
+  save();
+  if (opts.light) { renderRows(); renderData(); return; }
+  render(opts);
+}
+
+/* старт */
+resetDomain();
+setZoom(view.pxPerDay);
+goToDay(TODAY);
+</script>
+</body>
+</html>

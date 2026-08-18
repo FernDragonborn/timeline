@@ -1,0 +1,196 @@
+/*
+ * Оформлення бічної панелі. Глобальне, бо панель складається з трьох
+ * компонентів (подія, доріжка, документ), і поля в них мають виглядати
+ * однаково. Префікс `insp-` — навмисний: узагальнене ім'я на кшталт `.field`
+ * рано чи пізно означатиме дві різні речі, і глобальне правило поїде на чужий
+ * елемент.
+ */
+
+.insp-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-label);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--color-text-muted);
+}
+
+.insp-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--dot-colour, var(--color-text-muted));
+  flex: none;
+}
+
+.insp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.insp-field > span {
+  font-size: var(--font-size-label);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+}
+
+.insp-field input,
+.insp-field select,
+.insp-field textarea {
+  width: 100%;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+}
+
+.insp-field input:focus,
+.insp-field select:focus,
+.insp-field textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.insp-field textarea {
+  resize: vertical;
+  min-height: 84px;
+  line-height: 1.5;
+}
+
+.insp-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.insp-meta {
+  margin: 0;
+  font-size: var(--font-size-small);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.insp-segmented {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--color-panel-raised);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+}
+
+.insp-segmented button {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  padding: 4px 10px;
+  color: var(--color-text-muted);
+}
+
+.insp-segmented button[aria-pressed="true"] {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: 500;
+}
+
+.insp-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+
+.insp-swatch {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 4px;
+  background: var(--swatch-colour);
+  position: relative;
+}
+
+/* Розширює зону влучання, не змінюючи вигляду. */
+.insp-swatch::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+}
+
+.insp-swatch:hover {
+  box-shadow:
+    0 0 0 2px var(--color-panel),
+    0 0 0 3px var(--swatch-colour);
+}
+
+.insp-swatch[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--color-panel),
+    0 0 0 3.5px var(--color-text);
+}
+
+.insp-colour-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.insp-chip {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  padding: 5px 8px;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.insp-chip:hover {
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+
+.insp-chip[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+/* Нативна піпетка розтягнута на всю фішку й прозора: клікається будь-де. */
+.insp-chip input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+
+.insp-spacer {
+  flex: 1;
+}
+
+.insp-danger {
+  background: var(--color-panel-raised);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+}
+
+.insp-danger:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.insp-danger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

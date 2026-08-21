@@ -36,7 +36,7 @@
      зачепить будь-який стан, який сама ж і міняє. */
   onMount(() => {
     const storedWidth = Number(localStorage.getItem(HEAD_WIDTH_KEY));
-    if (Number.isFinite(storedWidth) && storedWidth > 0) timeline.setTrackHeadWidth(storedWidth);
+    if (Number.isFinite(storedWidth) && storedWidth > 0) timeline.viewport.setTrackHeadWidth(storedWidth);
 
     void documentFile.restoreSession();
 
@@ -59,7 +59,7 @@
   });
 
   $effect(() => {
-    localStorage.setItem(HEAD_WIDTH_KEY, String(timeline.trackHeadWidthPixels));
+    localStorage.setItem(HEAD_WIDTH_KEY, String(timeline.viewport.trackHeadWidthPixels));
   });
 
   function isTypingTarget(target: EventTarget | null): boolean {
@@ -115,17 +115,17 @@
       /* У полі Escape означає «покинути поле», а не «зняти виділення»: інакше
          вихід з поля назви заразом закривав би панель, яку ти правиш. */
       if (typing) (nativeEvent.target as HTMLElement).blur();
-      else timeline.clearSelection();
+      else timeline.selection.clearSelection();
       return;
     }
     if (typing) return;
 
     if (nativeEvent.code === "Equal" || nativeEvent.code === "NumpadAdd") {
-      timeline.setScale(timeline.pixelsPerDay * ZOOM_KEY_STEP);
+      timeline.setScale(timeline.viewport.pixelsPerDay * ZOOM_KEY_STEP);
       return;
     }
     if (nativeEvent.code === "Minus" || nativeEvent.code === "NumpadSubtract") {
-      timeline.setScale(timeline.pixelsPerDay / ZOOM_KEY_STEP);
+      timeline.setScale(timeline.viewport.pixelsPerDay / ZOOM_KEY_STEP);
       return;
     }
     if (nativeEvent.code === "Delete" || nativeEvent.code === "Backspace") {
@@ -136,7 +136,7 @@
 
 <svelte:window onkeydown={onKeyDown} />
 
-<div class="app" style:--track-head-width="{timeline.trackHeadWidthPixels}px">
+<div class="app" style:--track-head-width="{timeline.viewport.trackHeadWidthPixels}px">
   <Toolbar {theme} onToggleTheme={() => (theme = theme === "dark" ? "light" : "dark")} />
 
   <main>
@@ -154,7 +154,7 @@
   <footer>
     <span>{timeline.tracks.length} доріжок · {timeline.events.length} подій</span>
     <span class="spacer"></span>
-    <span>масштаб {timeline.pixelsPerDay.toFixed(2)} px/день</span>
+    <span>масштаб {timeline.viewport.pixelsPerDay.toFixed(2)} px/день</span>
   </footer>
 </div>
 

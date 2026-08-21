@@ -7,17 +7,17 @@
   /** Лінії частіші за це зливаються в суцільну заливку — сенсу малювати немає. */
   const MIN_LINE_SPACING_PIXELS = 14;
 
-  const layout = $derived(tierLayout(timeline.rulerTier));
+  const layout = $derived(tierLayout(timeline.viewport.rulerTier));
   const range = $derived(timeline.visibleRange);
   const majorPeriods = $derived(periodsInRange(layout.major, range.fromDay, range.toDay));
   const minorPeriods = $derived(
     periodsInRange(layout.minor, range.fromDay, range.toDay).filter(
       (period) =>
-        (period.endDay - period.startDay) * timeline.pixelsPerDay >= MIN_LINE_SPACING_PIXELS,
+        (period.endDay - period.startDay) * timeline.viewport.pixelsPerDay >= MIN_LINE_SPACING_PIXELS,
     ),
   );
 
-  const x = (day: number): number => dayToPixel(timeline.domain, timeline.pixelsPerDay, day);
+  const x = (day: number): number => dayToPixel(timeline.domain, timeline.viewport.pixelsPerDay, day);
   const todayPixel = $derived(x(today()));
 </script>
 
@@ -27,7 +27,7 @@
       <div
         class="weekend"
         style:left="{x(period.startDay)}px"
-        style:width="{(period.endDay - period.startDay) * timeline.pixelsPerDay}px"
+        style:width="{(period.endDay - period.startDay) * timeline.viewport.pixelsPerDay}px"
       ></div>
     {/if}
     <div class="line" style:left="{x(period.startDay)}px"></div>

@@ -6,7 +6,8 @@
   import { EVENT_KIND } from "../lib/model/timeline-document";
   import { type DayNumber } from "../lib/time/day-number";
   import { snapKindForTier, snapToPeriodEnd, snapToPeriodStart } from "../lib/time/ruler";
-  import { DRAG_KIND, timeline } from "../lib/timeline-view-model.svelte";
+  import { DRAG_KIND } from "../lib/drag-session";
+  import { timeline } from "../lib/timeline-view-model.svelte";
   import { dayToPixel, pixelToDay, ZOOM_WHEEL_BASE } from "../lib/view/timeline-viewport";
 
   /** Ширина блока, який дає подвійний клік, — стала в пікселях, не в днях. */
@@ -46,7 +47,7 @@
   function dayAtClientX(bodyElement: Element, clientX: number): DayNumber {
     const rectangle = bodyElement.getBoundingClientRect();
     const day = Math.round(
-      pixelToDay(timeline.domain, timeline.pixelsPerDay, clientX - rectangle.left),
+      pixelToDay(timeline.domain, timeline.viewport.pixelsPerDay, clientX - rectangle.left),
     );
     /* Полотно ширше за домен, коли вікно більше за шкалу; без обмеження клік по
        порожньому місцю праворуч створював би подію за межами документа. */
@@ -86,8 +87,8 @@
 
       /* Натискання на вже обране НЕ перебирає виділення: інакше взятись за
          гурт було б неможливо — перший же дотик лишав би в ньому одну подію. */
-      if (nativeEvent.shiftKey || !timeline.isEventSelected(model.id)) {
-        timeline.selectEvent(model.id, { add: nativeEvent.shiftKey });
+      if (nativeEvent.shiftKey || !timeline.selection.isEventSelected(model.id)) {
+        timeline.selection.selectEvent(model.id, { add: nativeEvent.shiftKey });
       }
 
       const resizeSide = (nativeEvent.target as Element).closest("[data-resize]")?.getAttribute("data-resize");
@@ -116,7 +117,7 @@
       };
     } else {
       const anchorDay = dayAtClientX(body, nativeEvent.clientX);
-      timeline.clearSelection();
+      timeline.selection.clearSelection();
       creation = { trackId, anchorDay, currentDay: anchorDay };
     }
     scroller.setPointerCapture(nativeEvent.pointerId);
@@ -156,7 +157,7 @@
     nativeEvent.preventDefault();
     widthDrag = {
       startClientX: nativeEvent.clientX,
-      startWidth: timeline.trackHeadWidthPixels,
+      startWidth: timeline.viewport.trackHeadWidthPixels,
     };
     (nativeEvent.currentTarget as Element).setPointerCapture(nativeEvent.pointerId);
   }
@@ -164,7 +165,7 @@
   function onWidthDrag(nativeEvent: PointerEvent): void {
     const active = widthDrag;
     if (active === null) return;
-    timeline.setTrackHeadWidth(active.startWidth + (nativeEvent.clientX - active.startClientX));
+    timeline.viewport.setTrackHeadWidth(active.startWidth + (nativeEvent.clientX - active.startClientX));
   }
 
   function endWidthDrag(): void {
@@ -192,7 +193,7 @@
     }
     if (timeline.drag === null) return;
 
-    const dayOffset = Math.round((nativeEvent.clientX - pointerStartX) / timeline.pixelsPerDay);
+    const dayOffset = Math.round((nativeEvent.clientX - pointerStartX) / timeline.viewport.pixelsPerDay);
     const overRow = rowAt(nativeEvent.clientX, nativeEvent.clientY);
     timeline.dragBy(dayOffset, overRow?.getAttribute("data-track-id") ?? null);
   }
@@ -206,7 +207,7 @@
     startDay: DayNumber;
     endDay: DayNumber;
   } {
-    const kind = snapKindForTier(timeline.rulerTier);
+    const kind = snapKindForTier(timeline.viewport.rulerTier);
     return {
       startDay: snapToPeriodStart(Math.min(anchorDay, currentDay), kind),
       endDay: snapToPeriodEnd(Math.max(anchorDay, currentDay), kind),
@@ -221,7 +222,7 @@
       marquee = null;
       /* Рамка ЗАВЖДИ доливає до набору: її кличуть Shift-ом, а Shift скрізь у
          застосунку означає «додати до вже обраного». */
-      timeline.selectEvents(eventsWithin(box), { add: true });
+      timeline.selection.selectEvents(eventsWithin(box), { add: true });
       return;
     }
 
@@ -231,7 +232,7 @@
       if (anchorDay !== currentDay) {
         const range = snappedCreationRange(anchorDay, currentDay);
         const created = timeline.addEvent(trackId, range.startDay, range.endDay, EVENT_KIND.Span);
-        timeline.startRenaming(created.id);
+        timeline.selection.startRenaming(created.id);
       }
       return;
     }
@@ -259,7 +260,7 @@
     /* По готовій події подвійний клік — це «перейменувати», а не «створити». */
     const existingId = under?.closest("[data-event-id]")?.getAttribute("data-event-id");
     if (existingId != null) {
-      timeline.startRenaming(existingId);
+      timeline.selection.startRenaming(existingId);
       return;
     }
 
@@ -269,23 +270,23 @@
 
     /* Прилипання те саме, що й у перетягуванні: спосіб створення не має
        міняти те, на які дати подія сяде. */
-    const kind = snapKindForTier(timeline.rulerTier);
+    const kind = snapKindForTier(timeline.viewport.rulerTier);
     const day = snapToPeriodStart(dayAtClientX(body, nativeEvent.clientX), kind);
 
     /* Alt робить точкову подію: те саме місце, інший рід. */
     if (nativeEvent.altKey) {
       const created = timeline.addEvent(trackId, day, day, EVENT_KIND.Point);
-      timeline.startRenaming(created.id);
+      timeline.selection.startRenaming(created.id);
       return;
     }
-    const span = Math.max(1, Math.round(QUICK_EVENT_PIXELS / timeline.pixelsPerDay));
+    const span = Math.max(1, Math.round(QUICK_EVENT_PIXELS / timeline.viewport.pixelsPerDay));
     const created = timeline.addEvent(
       trackId,
       day,
       snapToPeriodEnd(day + span - 1, kind),
       EVENT_KIND.Span,
     );
-    timeline.startRenaming(created.id);
+    timeline.selection.startRenaming(created.id);
   }
 
   /**
@@ -316,10 +317,10 @@
     if (nativeEvent.ctrlKey) {
       nativeEvent.preventDefault();
       const viewportX = nativeEvent.clientX - scroller.getBoundingClientRect().left;
-      const bodyPixel = scroller.scrollLeft + viewportX - timeline.trackHeadWidthPixels;
-      const anchorDay = pixelToDay(timeline.domain, timeline.pixelsPerDay, bodyPixel);
+      const bodyPixel = scroller.scrollLeft + viewportX - timeline.viewport.trackHeadWidthPixels;
+      const anchorDay = pixelToDay(timeline.domain, timeline.viewport.pixelsPerDay, bodyPixel);
 
-      timeline.setScale(timeline.pixelsPerDay * Math.pow(ZOOM_WHEEL_BASE, -step), {
+      timeline.setScale(timeline.viewport.pixelsPerDay * Math.pow(ZOOM_WHEEL_BASE, -step), {
         day: anchorDay,
         viewportPixel: viewportX,
       });
@@ -332,7 +333,7 @@
   }
 
   function reportScroll(): void {
-    timeline.reportScroll(scroller.scrollLeft - timeline.trackHeadWidthPixels, scroller.clientWidth);
+    timeline.viewport.reportScroll(scroller.scrollLeft - timeline.viewport.trackHeadWidthPixels, scroller.clientWidth);
   }
 
   let scrollScheduled = false;
@@ -349,16 +350,16 @@
      володіє елементом прокрутки, тобто цей компонент. Єдина залежність —
      лічильник прохань; сам день читається без підписки. */
   $effect(() => {
-    if (timeline.scrollRequestId === 0) return;
+    if (timeline.viewport.scrollRequestId === 0) return;
     const target = untrack(() => ({
-      day: timeline.scrollTargetDay,
-      viewportPixel: timeline.scrollTargetViewportPixel,
+      day: timeline.viewport.scrollTargetDay,
+      viewportPixel: timeline.viewport.scrollTargetViewportPixel,
     }));
     void (async () => {
       await tick();
       scroller.scrollLeft =
-        dayToPixel(timeline.domain, timeline.pixelsPerDay, target.day) +
-        timeline.trackHeadWidthPixels -
+        dayToPixel(timeline.domain, timeline.viewport.pixelsPerDay, target.day) +
+        timeline.viewport.trackHeadWidthPixels -
         target.viewportPixel;
       reportScroll();
     })();
@@ -377,12 +378,12 @@
   const previewLeft = $derived(
     previewRange === null
       ? 0
-      : dayToPixel(timeline.domain, timeline.pixelsPerDay, previewRange.startDay),
+      : dayToPixel(timeline.domain, timeline.viewport.pixelsPerDay, previewRange.startDay),
   );
   const previewWidth = $derived(
     previewRange === null
       ? 0
-      : Math.max(2, (previewRange.endDay - previewRange.startDay + 1) * timeline.pixelsPerDay),
+      : Math.max(2, (previewRange.endDay - previewRange.startDay + 1) * timeline.viewport.pixelsPerDay),
   );
 </script>
 
@@ -400,7 +401,7 @@
   role="application"
   aria-label="Часова шкала"
 >
-  <div class="canvas" style:width="{timeline.trackHeadWidthPixels + timeline.canvasWidthPixels}px">
+  <div class="canvas" style:width="{timeline.viewport.trackHeadWidthPixels + timeline.canvasWidthPixels}px">
     <div class="ruler-row">
       <div class="ruler-corner">Доріжки</div>
       <Ruler />
@@ -427,7 +428,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="head-divider"
-  style:left="{timeline.trackHeadWidthPixels}px"
+  style:left="{timeline.viewport.trackHeadWidthPixels}px"
   title="Тягнути — ширина колонки з назвами"
   onpointerdown={beginWidthDrag}
   onpointermove={onWidthDrag}

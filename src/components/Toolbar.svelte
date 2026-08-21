@@ -57,20 +57,20 @@
       type="range"
       min="0"
       max={SLIDER_MAX}
-      value={scaleToSlider(timeline.pixelsPerDay)}
+      value={scaleToSlider(timeline.viewport.pixelsPerDay)}
       oninput={(nativeEvent) => timeline.setScale(sliderToScale(Number(nativeEvent.currentTarget.value)))}
     />
-    <span class="tier">{RULER_TIER_LABEL[timeline.rulerTier]}</span>
+    <span class="tier">{RULER_TIER_LABEL[timeline.viewport.rulerTier]}</span>
   </label>
 
   <div class="segmented">
     <button
-      aria-pressed={timeline.overlapMode === OVERLAP_MODE.Overlay}
-      onclick={() => timeline.setOverlapMode(OVERLAP_MODE.Overlay)}>Прозоро</button
+      aria-pressed={timeline.viewport.overlapMode === OVERLAP_MODE.Overlay}
+      onclick={() => timeline.viewport.setOverlapMode(OVERLAP_MODE.Overlay)}>Прозоро</button
     >
     <button
-      aria-pressed={timeline.overlapMode === OVERLAP_MODE.Stack}
-      onclick={() => timeline.setOverlapMode(OVERLAP_MODE.Stack)}>Стек</button
+      aria-pressed={timeline.viewport.overlapMode === OVERLAP_MODE.Stack}
+      onclick={() => timeline.viewport.setOverlapMode(OVERLAP_MODE.Stack)}>Стек</button
     >
   </div>
 

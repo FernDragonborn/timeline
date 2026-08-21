@@ -6,7 +6,7 @@
   /** Нижче цієї ширини підпис поділки не влізе і лише замусорить лінійку. */
   const MIN_MINOR_LABEL_PIXELS = 22;
 
-  const layout = $derived(tierLayout(timeline.rulerTier));
+  const layout = $derived(tierLayout(timeline.viewport.rulerTier));
   const range = $derived(timeline.visibleRange);
 
   const majorPeriods = $derived(
@@ -15,9 +15,9 @@
   const minorPeriods = $derived(periodsInRange(layout.minor, range.fromDay, range.toDay));
 
   const left = (period: Period): number =>
-    dayToPixel(timeline.domain, timeline.pixelsPerDay, period.startDay);
+    dayToPixel(timeline.domain, timeline.viewport.pixelsPerDay, period.startDay);
   const width = (period: Period): number =>
-    (period.endDay - period.startDay) * timeline.pixelsPerDay;
+    (period.endDay - period.startDay) * timeline.viewport.pixelsPerDay;
 </script>
 
 <div class="ruler" style:width="{timeline.canvasWidthPixels}px">

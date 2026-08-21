@@ -25,18 +25,18 @@
 
   const layout = $derived(
     planTrackLayout(timeline.eventsOfTrack(track.id), {
-      pixelsPerDay: timeline.pixelsPerDay,
-      overlapMode: timeline.overlapMode,
+      pixelsPerDay: timeline.viewport.pixelsPerDay,
+      overlapMode: timeline.viewport.overlapMode,
       measureLabelWidth: measureLabel,
     }),
   );
-  const height = $derived(rowHeight(timeline.overlapMode, layout.laneCount, track.height));
-  const isStacked = $derived(timeline.overlapMode === OVERLAP_MODE.Stack);
+  const height = $derived(rowHeight(timeline.viewport.overlapMode, layout.laneCount, track.height));
+  const isStacked = $derived(timeline.viewport.overlapMode === OVERLAP_MODE.Stack);
 
   const geometry = $derived<RowGeometry>({
-    mode: timeline.overlapMode,
+    mode: timeline.viewport.overlapMode,
     domain: timeline.domain,
-    pixelsPerDay: timeline.pixelsPerDay,
+    pixelsPerDay: timeline.viewport.pixelsPerDay,
     trackHeight: height,
   });
 
@@ -104,7 +104,7 @@
     if (!nativeEvent.shiftKey) return;
     /* Інакше натискання поставило б курсор у поле назви замість виділення. */
     nativeEvent.preventDefault();
-    timeline.selectTrack(track.id, { add: true });
+    timeline.selection.selectTrack(track.id, { add: true });
   }
   function focusAndSelect(element: HTMLInputElement): void {
     element.focus();
@@ -112,8 +112,8 @@
   }
 
   function commitRename(eventId: string, title: string): void {
-    if (timeline.renamingEventId !== eventId) return;
-    timeline.stopRenaming();
+    if (timeline.selection.renamingEventId !== eventId) return;
+    timeline.selection.stopRenaming();
     const trimmed = title.trim();
     const current = timeline.events.find((candidate) => candidate.id === eventId);
     if (!current || current.title === trimmed) return;
@@ -127,7 +127,7 @@
     if (nativeEvent.code === "Enter" || nativeEvent.code === "NumpadEnter") {
       nativeEvent.currentTarget.blur();
     } else if (nativeEvent.code === "Escape") {
-      timeline.stopRenaming();
+      timeline.selection.stopRenaming();
     }
   }
 
@@ -143,10 +143,10 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="head"
-    class:selected={timeline.isTrackSelected(track.id)}
+    class:selected={timeline.selection.isTrackSelected(track.id)}
     title="Подвійний клік — властивості доріжки, Shift+клік — виділити"
     onpointerdown={onHeadPointerDown}
-    ondblclick={() => timeline.selectTrack(track.id)}
+    ondblclick={() => timeline.selection.selectTrack(track.id)}
   >
     <!-- Держак: смужка кольору доріжки й нею ж тягнемо порядок. Курсор і
          крапки кажуть, що це ручка, а не просто позначка. -->
@@ -190,7 +190,7 @@
       <div
         class="event"
         class:point={placement.event.kind === EVENT_KIND.Point}
-        class:selected={timeline.isEventSelected(placement.event.id)}
+        class:selected={timeline.selection.isEventSelected(placement.event.id)}
         data-event-id={placement.event.id}
         title={tooltipOf(placement)}
         style:--event-colour={colourOf(placement)}
@@ -211,7 +211,7 @@
          заливкою і може виходити за правий край свого блока. -->
     {#each layout.placements as placement (placement.event.id)}
       {@const position = labelOf(placement)}
-      {@const renaming = timeline.renamingEventId === placement.event.id}
+      {@const renaming = timeline.selection.renamingEventId === placement.event.id}
       {#if renaming}
         <!-- Поле перейменування показуємо завжди, навіть коли підпис не влазив:
              інакше найвужчі події неможливо було б перейменувати з полотна. -->

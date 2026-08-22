@@ -5,24 +5,19 @@
   import TrackRow from "./TrackRow.svelte";
   import { EVENT_KIND } from "../lib/model/timeline-document";
   import { type DayNumber } from "../lib/time/day-number";
-  import { snapKindForTier, snapToPeriodEnd, snapToPeriodStart } from "../lib/time/ruler";
   import { DRAG_KIND } from "../lib/drag-session";
   import { timeline } from "../lib/timeline-view-model.svelte";
+  import {
+    dayAtBodyPixel,
+    marqueeSides,
+    quickEventRange,
+    rectanglesOverlap,
+    snappedCreationRange,
+    wheelStepPixels,
+    DRAG_THRESHOLD_PIXELS,
+    type MarqueeBox,
+  } from "../lib/view/canvas-gestures";
   import { dayToPixel, pixelToDay, ZOOM_WHEEL_BASE } from "../lib/view/timeline-viewport";
-
-  /** Ширина блока, який дає подвійний клік, — стала в пікселях, не в днях. */
-  const QUICK_EVENT_PIXELS = 90;
-
-  /**
-   * Далі якого зсуву натискання вважається перетягуванням, а не кліком.
-   * Кілька пікселів дрижання руки на подвійному кліку — це нормально.
-   */
-  const DRAG_THRESHOLD_PIXELS = 4;
-
-  /** `WheelEvent.deltaMode`, коли крок міряється рядками, а не пікселями. */
-  const WHEEL_DELTA_LINE = 1;
-  /** У скільки пікселів рахувати такий рядок. */
-  const WHEEL_LINE_PIXELS = 33;
 
   let scroller: HTMLDivElement;
   let pointerStartX = 0;
@@ -35,23 +30,15 @@
   let suppressDoubleClick = false;
   let creation = $state<{ trackId: string; anchorDay: DayNumber; currentDay: DayNumber } | null>(null);
 
-  /** Рамка виділення, у координатах вікна — саме в них лежать прямокутники подій. */
-  interface MarqueeBox {
-    fromX: number;
-    fromY: number;
-    toX: number;
-    toY: number;
-  }
   let marquee = $state<MarqueeBox | null>(null);
 
   function dayAtClientX(bodyElement: Element, clientX: number): DayNumber {
     const rectangle = bodyElement.getBoundingClientRect();
-    const day = Math.round(
-      pixelToDay(timeline.domain, timeline.viewport.pixelsPerDay, clientX - rectangle.left),
+    return dayAtBodyPixel(
+      timeline.domain,
+      timeline.viewport.pixelsPerDay,
+      clientX - rectangle.left,
     );
-    /* Полотно ширше за домен, коли вікно більше за шкалу; без обмеження клік по
-       порожньому місцю праворуч створював би подію за межами документа. */
-    return Math.min(timeline.domain.toDay, Math.max(timeline.domain.fromDay, day));
   }
 
   function bodyOfRow(row: Element): Element | null {
@@ -129,22 +116,12 @@
    * арифметики розійшлася б із першою на першій же правці.
    */
   function eventsWithin(box: MarqueeBox): string[] {
-    const left = Math.min(box.fromX, box.toX);
-    const right = Math.max(box.fromX, box.toX);
-    const top = Math.min(box.fromY, box.toY);
-    const bottom = Math.max(box.fromY, box.toY);
-
+    const sides = marqueeSides(box);
     const caught: string[] = [];
     for (const element of document.querySelectorAll("[data-event-id]")) {
       const id = element.getAttribute("data-event-id");
       if (id === null) continue;
-      const rectangle = element.getBoundingClientRect();
-      const overlaps =
-        rectangle.right >= left &&
-        rectangle.left <= right &&
-        rectangle.bottom >= top &&
-        rectangle.top <= bottom;
-      if (overlaps) caught.push(id);
+      if (rectanglesOverlap(element.getBoundingClientRect(), sides)) caught.push(id);
     }
     return caught;
   }
@@ -198,22 +175,6 @@
     timeline.dragBy(dayOffset, overRow?.getAttribute("data-track-id") ?? null);
   }
 
-  /**
-   * Межі майбутньої події, притягнуті до поділок поточного масштабу. Малюючи по
-   * місяцях, людина й хоче «весь березень», а не «з 3 по 29» — ловити піксель
-   * заради рівної дати нікому не треба.
-   */
-  function snappedCreationRange(anchorDay: DayNumber, currentDay: DayNumber): {
-    startDay: DayNumber;
-    endDay: DayNumber;
-  } {
-    const kind = snapKindForTier(timeline.viewport.rulerTier);
-    return {
-      startDay: snapToPeriodStart(Math.min(anchorDay, currentDay), kind),
-      endDay: snapToPeriodEnd(Math.max(anchorDay, currentDay), kind),
-    };
-  }
-
   function onPointerUp(): void {
     suppressDoubleClick = pointerMoved;
 
@@ -230,7 +191,7 @@
       const { trackId, anchorDay, currentDay } = creation;
       creation = null;
       if (anchorDay !== currentDay) {
-        const range = snappedCreationRange(anchorDay, currentDay);
+        const range = snappedCreationRange(anchorDay, currentDay, timeline.viewport.rulerTier);
         const created = timeline.addEvent(trackId, range.startDay, range.endDay, EVENT_KIND.Span);
         timeline.selection.startRenaming(created.id);
       }
@@ -268,42 +229,17 @@
     const trackId = row.getAttribute("data-track-id");
     if (body === null || trackId === null) return;
 
-    /* Прилипання те саме, що й у перетягуванні: спосіб створення не має
-       міняти те, на які дати подія сяде. */
-    const kind = snapKindForTier(timeline.viewport.rulerTier);
-    const day = snapToPeriodStart(dayAtClientX(body, nativeEvent.clientX), kind);
+    const range = quickEventRange(
+      dayAtClientX(body, nativeEvent.clientX),
+      timeline.viewport.pixelsPerDay,
+      timeline.viewport.rulerTier,
+    );
 
     /* Alt робить точкову подію: те саме місце, інший рід. */
-    if (nativeEvent.altKey) {
-      const created = timeline.addEvent(trackId, day, day, EVENT_KIND.Point);
-      timeline.selection.startRenaming(created.id);
-      return;
-    }
-    const span = Math.max(1, Math.round(QUICK_EVENT_PIXELS / timeline.viewport.pixelsPerDay));
-    const created = timeline.addEvent(
-      trackId,
-      day,
-      snapToPeriodEnd(day + span - 1, kind),
-      EVENT_KIND.Span,
-    );
+    const created = nativeEvent.altKey
+      ? timeline.addEvent(trackId, range.startDay, range.startDay, EVENT_KIND.Point)
+      : timeline.addEvent(trackId, range.startDay, range.endDay, EVENT_KIND.Span);
     timeline.selection.startRenaming(created.id);
-  }
-
-  /**
-   * Крок колеса в пікселях, незалежно від того, на яку вісь браузер його поклав.
-   *
-   * Осі тут не фіксовані: із затиснутим Shift Chromium сам переносить крок з
-   * `deltaY` у `deltaX`, тож читати лише одну вісь — значить не побачити
-   * половини випадків. `deltaMode` «рядки» без множника дає крок у кілька
-   * пікселів, тобто рух ледь помітний.
-   */
-  function wheelStepPixels(nativeEvent: WheelEvent): number {
-    const scale = nativeEvent.deltaMode === WHEEL_DELTA_LINE ? WHEEL_LINE_PIXELS : 1;
-    const dominant =
-      Math.abs(nativeEvent.deltaY) >= Math.abs(nativeEvent.deltaX)
-        ? nativeEvent.deltaY
-        : nativeEvent.deltaX;
-    return dominant * scale;
   }
 
   /**
@@ -373,7 +309,9 @@
   /* Прев'ю показує вже притягнуті межі: рамка не має брехати про те, що вийде
      після відпускання кнопки. */
   const previewRange = $derived(
-    creation === null ? null : snappedCreationRange(creation.anchorDay, creation.currentDay),
+    creation === null
+      ? null
+      : snappedCreationRange(creation.anchorDay, creation.currentDay, timeline.viewport.rulerTier),
   );
   const previewLeft = $derived(
     previewRange === null

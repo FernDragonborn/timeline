@@ -231,7 +231,18 @@ Rules that govern it:
   reads the counter and the payload without writing back what it just read. Wrap an effect's
   imperative tail in `untrack` when it touches state it doesn't want to depend on.
 - **Separate view state from document state.** `pxPerDay`, overlap mode, selection, scroll position
-  are view state and never reach the saved file.
+  are view state and never reach the saved file. They are also separate *objects* — `timeline.viewport`
+  (`ViewportState`: scale, free domain, scroll geometry, overlap mode, name-column width) and
+  `timeline.selection` (`SelectionStore`) — reached through the view-model, not mirrored by it. A
+  facade that re-exported all of them as one-line getters was fifty lines of delegation that told the
+  reader nothing; the call site now says which half of the state it touches. What stays on the
+  view-model itself is what needs *both*: `domain` (document bounds override the free one),
+  `selectedEvents`, `deleteSelection`.
+- **The view-model orchestrates; it does not compute.** Anything a test could pin down lives beside
+  it as pure functions — `drag-session.ts` (one frame of a drag), `model/document-edits.ts` (creating
+  an event, clamping a point to one day, reordering tracks), `view/canvas-gestures.ts` (wheel step,
+  marquee hit-testing, creation snapping). The class records the history step, mutates, and tells the
+  viewport; the arithmetic is elsewhere.
 
 ## Code rules
 
@@ -303,8 +314,10 @@ Rules that govern it:
   the refactor was safe. Test at a stable boundary: feed a pure function its inputs and check its
   outputs.
 - **During active development the bug nets are strict typing and walking the UI**, and tests cover
-  the pure maths (day↔pixel, tick generation, lane packing, history) where a wrong number is silent.
-  Don't propose coverage gates while the shape is still moving.
+  the pure maths (day↔pixel, tick generation, lane packing, history, drag frames, document edits,
+  gesture arithmetic) plus the file gate's defaults and rejections — everywhere a wrong number or a
+  silently-accepted field says nothing at runtime. Don't propose coverage gates while the shape is
+  still moving.
 
 ## Refactoring mechanics
 

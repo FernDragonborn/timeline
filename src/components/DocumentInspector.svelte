@@ -87,7 +87,7 @@
 
 <style>
   .hint {
-    font-size: 12px;
+    font-size: var(--font-size-medium);
     line-height: 1.7;
     color: var(--color-text-muted);
   }

@@ -63,7 +63,7 @@
   .major {
     border-left: 1px solid var(--color-line);
     padding: 5px 0 0 7px;
-    font-size: 11.5px;
+    font-size: var(--font-size-tick);
     font-weight: 600;
   }
 

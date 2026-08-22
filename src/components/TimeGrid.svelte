@@ -82,7 +82,7 @@
     position: absolute;
     top: 2px;
     left: 4px;
-    font-size: 9.5px;
+    font-size: var(--font-size-micro);
     letter-spacing: 0.5px;
     text-transform: uppercase;
     color: var(--color-danger);

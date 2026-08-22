@@ -26,8 +26,14 @@
 
   --font-ui: -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
   --font-size-base: 13px;
+  --font-size-medium: 12px;
+  --font-size-tick: 11.5px;
   --font-size-small: 11px;
   --font-size-label: 10.5px;
+  --font-size-micro: 9.5px;
+
+  /* Підняте над полотном: обрана подія, і будь-що інше, що має відірватися. */
+  --shadow-lifted: 0 4px 14px rgba(0, 0, 0, 0.35);
 
   --radius: 5px;
   /* --track-head-width виставляє App.svelte із TRACK_HEAD_WIDTH_PIXELS: ця
@@ -52,6 +58,7 @@
 
   --event-fill-opacity: 0.34;
   --event-blend-mode: multiply;
+  --shadow-lifted: 0 4px 14px rgba(0, 0, 0, 0.18);
   --color-weekend: rgba(127, 140, 170, 0.05);
 }
 

@@ -407,7 +407,7 @@
   .event.selected {
     box-shadow:
       0 0 0 1.5px var(--color-accent),
-      0 4px 14px rgba(0, 0, 0, 0.35);
+      var(--shadow-lifted);
     z-index: 4;
   }
 
@@ -466,7 +466,7 @@
     pointer-events: none;
     white-space: nowrap;
     font-weight: 600;
-    font-size: 12px;
+    font-size: var(--font-size-medium);
     line-height: 15px;
     /* Тінь кольором тла: підпис лишається читабельним і над заливкою, і над сіткою. */
     text-shadow: 0 1px 2px var(--color-bg);
@@ -481,7 +481,7 @@
     width: 180px;
     padding: 1px 5px;
     font-weight: 600;
-    font-size: 12px;
+    font-size: var(--font-size-medium);
     line-height: 15px;
     background: var(--color-panel);
     border: 1px solid var(--color-accent);

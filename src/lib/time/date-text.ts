@@ -1,4 +1,4 @@
-import { dateToDayNumber, dayNumberToDate, type DayNumber } from "./day-number";
+import { dayNumberOfParts, dayNumberToDate, type DayNumber } from "./day-number";
 
 /**
  * Текстова форма дати для полів вводу: «20.03.2026».
@@ -49,15 +49,7 @@ function matchThreeNumbers(pattern: RegExp, text: string): [number, number, numb
   return [Number(first), Number(second), Number(third)];
 }
 
-/**
- * Відкидає неіснуючі дати. `Date.UTC` мовчки переносить 31 лютого на 3 березня,
- * тож єдина надійна перевірка — зібрати дату й подивитись, чи вціліли частини.
- */
 function fromParts(dayOfMonth: number, month: number, year: number): DateTextParse {
-  const date = new Date(Date.UTC(year, month - 1, dayOfMonth));
-  const survived =
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === dayOfMonth;
-  return survived ? { ok: true, day: dateToDayNumber(date) } : { ok: false };
+  const day = dayNumberOfParts(year, month, dayOfMonth);
+  return day === null ? { ok: false } : { ok: true, day };
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { dayNumberOfParts } from "../time/day-number";
 
 /**
  * Форма файлу на диску. Схема тут не для краси: файл редагується руками,
@@ -22,7 +23,15 @@ const colorSchema = z
 const isoDateSchema = z
   .string()
   .regex(ISO_DATE, "Дата має бути у форматі YYYY-MM-DD")
-  .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), "Неіснуюча дата");
+  .refine(isRealIsoDate, "Неіснуюча дата");
+
+/* `Date.parse` бере «2026-02-30» і тихо робить із неї 2 березня: рядок у файлі
+   казав би одне, а намальована подія стояла б на іншому дні. */
+function isRealIsoDate(value: string): boolean {
+  const [year, month, dayOfMonth] = value.split("-").map(Number);
+  if (year === undefined || month === undefined || dayOfMonth === undefined) return false;
+  return dayNumberOfParts(year, month, dayOfMonth) !== null;
+}
 
 /** Висота доріжки за замовчуванням; вона ж нижня межа при перетягуванні. */
 export const DEFAULT_TRACK_HEIGHT = 66;

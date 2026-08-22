@@ -19,6 +19,26 @@ export function isoToDayNumber(iso: string): DayNumber {
   return Math.floor(Date.parse(`${iso}T00:00:00Z`) / MILLISECONDS_PER_DAY);
 }
 
+/**
+ * Номер дня зі складників дати або `null`, якщо такої дати не існує.
+ *
+ * `Date.UTC` мовчки переносить 31 лютого на 3 березня, а `Date.parse` так само
+ * бере «2026-02-30», тож єдина надійна перевірка — зібрати дату й подивитись,
+ * чи вціліли частини.
+ */
+export function dayNumberOfParts(
+  year: number,
+  month: number,
+  dayOfMonth: number,
+): DayNumber | null {
+  const date = new Date(Date.UTC(year, month - 1, dayOfMonth));
+  const survived =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === dayOfMonth;
+  return survived ? dateToDayNumber(date) : null;
+}
+
 export function dayNumberToIso(day: DayNumber): string {
   return dayNumberToDate(day).toISOString().slice(0, 10);
 }

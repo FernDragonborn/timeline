@@ -73,6 +73,10 @@ rules document — two of them drift, and then neither is trusted.
 Point events draw as a **pin** — a hairline down the whole lane with a dot at the top — chosen by the
 maintainer from five rendered variants (diamond, hollow diamond, pin, flag, dot).
 
+The app icon's source is `src-tauri/icons/icon.svg`; every other file in that folder is generated
+from it with `pnpm tauri icon src-tauri/icons/icon.svg` (then delete the `android/` and `ios/` it
+also emits). Edit the SVG, never the PNGs.
+
 ## Agreed design decisions
 
 Settled with the maintainer; changing any of these is a decision, not an implementation detail.

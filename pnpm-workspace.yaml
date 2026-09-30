@@ -1,0 +1,7 @@
+packages:
+  - '.'
+
+# pnpm 11 blocks install scripts unless approved, and in CI an unapproved one fails
+# `pnpm install --frozen-lockfile` (ERR_PNPM_IGNORED_BUILDS). esbuild fetches its native binary.
+allowBuilds:
+  esbuild: true

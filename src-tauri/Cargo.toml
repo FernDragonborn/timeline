@@ -1,6 +1,6 @@
 [package]
 name = "timeline"
-version = "0.1.0"
+version = "0.1.1"
 description = "Часова шкала з подіями, що перетинаються"
 authors = ["you"]
 edition = "2021"
